@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { User, LogOut, Settings, UserPlus, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import UserManagementModal from './UserManagementModal';
 
 const UserMenu: React.FC = () => {
   const { user, logout, permissions } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+  const [showUserManagement, setShowUserManagement] = useState(false);
 
   if (!user) return null;
 
@@ -54,7 +56,7 @@ const UserMenu: React.FC = () => {
                   <button
                     onClick={() => {
                       setIsOpen(false);
-                      // TODO: Open user management modal
+                      setShowUserManagement(true);
                     }}
                     className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                   >
@@ -91,6 +93,12 @@ const UserMenu: React.FC = () => {
           </div>
         </>
       )}
+
+      {/* User Management Modal */}
+      <UserManagementModal 
+        isOpen={showUserManagement}
+        onClose={() => setShowUserManagement(false)}
+      />
     </div>
   );
 };
