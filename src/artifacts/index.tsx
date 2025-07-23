@@ -17,9 +17,9 @@ import {
 } from '../utils/gameLogic';
 
 // Import tab components
-import ClassificaTab from '../components/tabs/ClassificaTab';
-import NuovaPartitaTab from '../components/tabs/NuovaPartitaTab';
-import StoricoTab from '../components/tabs/StoricoTab';
+import RankingsTab from '../components/tabs/RankingsTab';
+import NewMatchTab from '../components/tabs/NewMatchTab';
+import HistoryTab from '../components/tabs/HistoryTab';
 import StorageTab from '../components/tabs/StorageTab';
 
 const FoosballManager = () => {
@@ -44,7 +44,7 @@ const FoosballManager = () => {
     team1Score: 0,
     team2Score: 0
   });
-  const [activeTab, setActiveTab] = useState('classifica');
+  const [activeTab, setActiveTab] = useState('rankings');
   const [matchFilterPlayer, setMatchFilterPlayer] = useState<string>('');
 
   // Handle file import
@@ -57,7 +57,7 @@ const FoosballManager = () => {
       try {
         const result = e.target?.result;
         if (typeof result !== 'string') {
-          alert('Errore: il file non è un testo valido!');
+          alert('Error: the file is not valid text!');
           return;
         }
         const data: AppData = JSON.parse(result);
@@ -65,12 +65,12 @@ const FoosballManager = () => {
         // Verify format
         if (data.players && data.matches) {
           await importDataFromFile(data);
-          alert('Dati importati con successo!');
+          alert('Data imported successfully!');
         } else {
-          alert('File di dati non valido!');
+          alert('Invalid data file!');
         }
       } catch (error) {
-        alert('Errore nell\'importazione del file!');
+        alert('Error importing file!');
       }
     };
     reader.readAsText(file);
@@ -81,13 +81,13 @@ const FoosballManager = () => {
 
   // Handle reset with confirmation
   const handleResetAll = async () => {
-    if (confirm('Sei sicuro di voler cancellare tutti i dati? Questa operazione non è reversibile!')) {
+    if (confirm('Are you sure you want to delete all data? This operation is irreversible!')) {
       try {
         await resetAll();
-        alert('Tutti i dati sono stati cancellati!');
+        alert('All data has been deleted!');
       } catch (error) {
-        console.error('Errore nella cancellazione:', error);
-        alert('Errore nella cancellazione dei dati!');
+        console.error('Error deleting data:', error);
+        alert('Error deleting data!');
       }
     }
   };
@@ -95,7 +95,7 @@ const FoosballManager = () => {
   // Delete match and revert ELO changes
   const deleteMatch = (matchToDelete: Match) => {
     const matchInfo = `${matchToDelete.team1.join(' & ')} vs ${matchToDelete.team2.join(' & ')} (${matchToDelete.team1Score}-${matchToDelete.team2Score})`;
-    if (!confirm(`Sei sicuro di voler cancellare questa partita?\n\n${matchInfo}\n\nL'ELO e le statistiche verranno ripristinati per tutti i giocatori coinvolti.`)) {
+    if (!confirm(`Are you sure you want to delete this match?\n\n${matchInfo}\n\nELO and statistics will be restored for all involved players.`)) {
       return;
     }
 
@@ -137,10 +137,10 @@ const FoosballManager = () => {
         prevMatches.filter(match => match.id !== matchToDelete.id)
       );
 
-      alert('Partita cancellata e ELO ripristinato!');
+      alert('Match deleted and ELO restored!');
     } catch (error) {
-      console.error('Errore nella cancellazione della partita:', error);
-      alert('Errore nella cancellazione della partita!');
+      console.error('Error deleting match:', error);
+      alert('Error deleting match!');
     }
   };
 
@@ -154,7 +154,7 @@ const FoosballManager = () => {
       newMatch.team1Score,
       newMatch.team2Score
     )) {
-      alert('Compila tutti i campi e assicurati che i punteggi siano diversi!');
+      alert('Fill in all fields and make sure the scores are different!');
       return;
     }
 
@@ -232,8 +232,8 @@ const FoosballManager = () => {
     // Add match to history
     const match: Match = {
       id: Date.now(),
-      date: new Date().toLocaleDateString('it-IT'),
-      time: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+      date: new Date().toLocaleDateString('en-US'),
+      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
       team1: [player1.name, player2.name],
       team2: [player3.name, player4.name],
       winner: team1Won ? 'team1' : 'team2',
@@ -259,13 +259,13 @@ const FoosballManager = () => {
       team2Score: 0
     });
 
-    alert('Partita aggiunta con successo!');
+    alert('Match added successfully!');
   };
 
   // Navigate to player history
   const goToPlayerHistory = (playerName: string) => {
     setMatchFilterPlayer(playerName);
-    setActiveTab('storico');
+    setActiveTab('history');
   };
 
   // Filter matches by player
@@ -281,42 +281,42 @@ const FoosballManager = () => {
       <div className="max-w-4xl mx-auto p-4">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">🏆 Calcetto Manager</h1>
-          <p className="text-gray-600">Gestisci la classifica ELO del tuo ufficio</p>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">🏆 Foosball Manager</h1>
+          <p className="text-gray-600">Manage your office's ELO rankings</p>
         </div>
 
         {/* Navigation */}
         <div className="flex justify-center mb-8">
           <div className="bg-white rounded-lg p-1 shadow-sm border">
             <button
-              onClick={() => setActiveTab('classifica')}
+              onClick={() => setActiveTab('rankings')}
               className={`px-6 py-2 rounded-md transition-colors ${
-                activeTab === 'classifica' 
+                activeTab === 'rankings' 
                   ? 'bg-blue-500 text-white' 
                   : 'text-gray-600 hover:text-blue-500'
               }`}
             >
-              Classifica
+              Rankings
             </button>
             <button
-              onClick={() => setActiveTab('nuova')}
+              onClick={() => setActiveTab('new')}
               className={`px-6 py-2 rounded-md transition-colors ${
-                activeTab === 'nuova' 
+                activeTab === 'new' 
                   ? 'bg-blue-500 text-white' 
                   : 'text-gray-600 hover:text-blue-500'
               }`}
             >
-              Nuova Partita
+              New Match
             </button>
             <button
-              onClick={() => setActiveTab('storico')}
+              onClick={() => setActiveTab('history')}
               className={`px-6 py-2 rounded-md transition-colors ${
-                activeTab === 'storico' 
+                activeTab === 'history' 
                   ? 'bg-blue-500 text-white' 
                   : 'text-gray-600 hover:text-blue-500'
               }`}
             >
-              Storico
+              History
             </button>
             <button
               onClick={() => setActiveTab('storage')}
@@ -337,40 +337,40 @@ const FoosballManager = () => {
             <div className="flex items-center gap-2 text-purple-700">
               <Save className="w-4 h-4" />
               <span className="text-sm">
-                IndexedDB • Ultimo salvataggio: {lastSaved.toLocaleString('it-IT')}
+                IndexedDB • Last saved: {lastSaved.toLocaleString('en-US')}
               </span>
             </div>
             <div className="text-xs text-purple-600">
-              {players.length} giocatori • {matches.length} partite
+              {players.length} players • {matches.length} matches
             </div>
           </div>
         )}
 
         {/* Content */}
         <div className="mb-8">
-          {activeTab === 'classifica' && (
-            <ClassificaTab 
+          {activeTab === 'rankings' && (
+            <RankingsTab 
               players={players} 
               onPlayerClick={goToPlayerHistory} 
             />
           )}
-          {activeTab === 'nuova' && (
-            <NuovaPartitaTab
+          {activeTab === 'new' && (
+            <NewMatchTab
               players={players}
               newMatch={newMatch}
               setNewMatch={setNewMatch}
               onAddMatch={addMatch}
             />
           )}
-          {activeTab === 'storico' && (
-            <StoricoTab
+          {activeTab === 'history' && (
+            <HistoryTab
               players={players}
               matches={matches}
               matchFilterPlayer={matchFilterPlayer}
               setMatchFilterPlayer={setMatchFilterPlayer}
               filteredMatches={filteredMatches}
               onDeleteMatch={deleteMatch}
-              onBackToClassifica={() => setActiveTab('classifica')}
+              onBackToRankings={() => setActiveTab('rankings')}
             />
           )}
           {activeTab === 'storage' && (
@@ -390,28 +390,28 @@ const FoosballManager = () => {
           <div className="bg-white rounded-lg p-6 shadow-sm border">
             <h3 className="font-semibold mb-4 flex items-center gap-2">
               <TrendingUp className="w-5 h-5" />
-              Statistiche Generali
+              General Statistics
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
               <div>
                 <div className="text-2xl font-bold text-blue-600">{players.length}</div>
-                <div className="text-sm text-gray-500">Giocatori</div>
+                <div className="text-sm text-gray-500">Players</div>
               </div>
               <div>
                 <div className="text-2xl font-bold text-green-600">{matches.length}</div>
-                <div className="text-sm text-gray-500">Partite</div>
+                <div className="text-sm text-gray-500">Matches</div>
               </div>
               <div>
                 <div className="text-2xl font-bold text-purple-600">
                   {Math.max(...players.map(p => p.elo), 0)}
                 </div>
-                <div className="text-sm text-gray-500">ELO Max</div>
+                <div className="text-sm text-gray-500">Max ELO</div>
               </div>
               <div>
                 <div className="text-2xl font-bold text-orange-600">
                   {players.length > 0 ? Math.round(players.reduce((sum, p) => sum + p.elo, 0) / players.length) : 0}
                 </div>
-                <div className="text-sm text-gray-500">ELO Medio</div>
+                <div className="text-sm text-gray-500">Average ELO</div>
               </div>
             </div>
           </div>

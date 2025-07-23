@@ -2,19 +2,19 @@ import React from 'react';
 import { Users, Trophy, Clock, Medal } from 'lucide-react';
 import { Player } from '../../types/foosball';
 
-interface ClassificaTabProps {
+interface RankingsTabProps {
   players: Player[];
   onPlayerClick: (playerName: string) => void;
 }
 
-const ClassificaTab: React.FC<ClassificaTabProps> = ({ players, onPlayerClick }) => {
+const RankingsTab: React.FC<RankingsTabProps> = ({ players, onPlayerClick }) => {
   const sortedPlayers = [...players].sort((a, b) => b.elo - a.elo);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 mb-6">
         <Trophy className="w-6 h-6 text-yellow-500" />
-        <h2 className="text-2xl font-bold">Classifica ELO</h2>
+        <h2 className="text-2xl font-bold">ELO Rankings</h2>
       </div>
 
       {sortedPlayers.length > 0 && (
@@ -22,7 +22,7 @@ const ClassificaTab: React.FC<ClassificaTabProps> = ({ players, onPlayerClick })
           <div className="flex items-center gap-2 text-blue-700">
             <Clock className="w-4 h-4" />
             <span className="text-sm">
-              <strong>Suggerimento:</strong> Clicca sul nome di un giocatore per vedere il suo storico partite.
+              <strong>Tip:</strong> Click on a player's name to view their match history.
             </span>
           </div>
         </div>
@@ -31,8 +31,8 @@ const ClassificaTab: React.FC<ClassificaTabProps> = ({ players, onPlayerClick })
       {sortedPlayers.length === 0 ? (
         <div className="text-center py-8 text-gray-500">
           <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>Nessun giocatore ancora registrato</p>
-          <p className="text-sm">Aggiungi la prima partita per iniziare!</p>
+          <p>No players registered yet</p>
+          <p className="text-sm">Add the first match to get started!</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -45,13 +45,13 @@ const ClassificaTab: React.FC<ClassificaTabProps> = ({ players, onPlayerClick })
                 <div 
                   className="cursor-pointer hover:bg-gray-50 p-2 rounded-md transition-colors flex-1"
                   onClick={() => onPlayerClick(player.name)}
-                  title={`Vedi le partite di ${player.name}`}
+                  title={`View matches for ${player.name}`}
                 >
                   <h3 className="font-semibold text-blue-600 hover:text-blue-800 hover:underline">
                     {player.name}
                   </h3>
                   <p className="text-sm text-gray-600">
-                    {player.matches} partite • {player.wins}V-{player.losses}P
+                    {player.matches} matches • {player.wins}W-{player.losses}L
                     {player.matches > 0 && (
                       <span className="ml-1">
                         ({Math.round((player.wins / player.matches) * 100)}%)
@@ -72,4 +72,4 @@ const ClassificaTab: React.FC<ClassificaTabProps> = ({ players, onPlayerClick })
   );
 };
 
-export default ClassificaTab; 
+export default RankingsTab; 

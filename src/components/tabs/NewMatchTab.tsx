@@ -3,14 +3,14 @@ import { Plus } from 'lucide-react';
 import { Player, NewMatch } from '../../types/foosball';
 import AutoCompleteInput from '../AutoCompleteInput';
 
-interface NuovaPartitaTabProps {
+interface NewMatchTabProps {
   players: Player[];
   newMatch: NewMatch;
   setNewMatch: React.Dispatch<React.SetStateAction<NewMatch>>;
   onAddMatch: () => void;
 }
 
-const NuovaPartitaTab: React.FC<NuovaPartitaTabProps> = ({
+const NewMatchTab: React.FC<NewMatchTabProps> = ({
   players,
   newMatch,
   setNewMatch,
@@ -20,7 +20,7 @@ const NuovaPartitaTab: React.FC<NuovaPartitaTabProps> = ({
     <div className="space-y-6">
       <div className="flex items-center gap-2 mb-6">
         <Plus className="w-6 h-6 text-green-500" />
-        <h2 className="text-2xl font-bold">Nuova Partita</h2>
+        <h2 className="text-2xl font-bold">New Match</h2>
       </div>
 
       <div className="bg-white rounded-lg p-6 shadow-sm border">
@@ -30,21 +30,21 @@ const NuovaPartitaTab: React.FC<NuovaPartitaTabProps> = ({
             <h3 className="font-semibold text-lg text-blue-600">Team 1</h3>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium mb-1">Giocatore 1</label>
+                <label className="block text-sm font-medium mb-1">Player 1</label>
                 <AutoCompleteInput
                   value={newMatch.team1Player1}
                   onChange={(value) => setNewMatch({...newMatch, team1Player1: value})}
-                  placeholder="Nome giocatore"
+                  placeholder="Player name"
                   className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   players={players}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Giocatore 2</label>
+                <label className="block text-sm font-medium mb-1">Player 2</label>
                 <AutoCompleteInput
                   value={newMatch.team1Player2}
                   onChange={(value) => setNewMatch({...newMatch, team1Player2: value})}
-                  placeholder="Nome giocatore"
+                  placeholder="Player name"
                   className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   players={players}
                 />
@@ -57,21 +57,21 @@ const NuovaPartitaTab: React.FC<NuovaPartitaTabProps> = ({
             <h3 className="font-semibold text-lg text-red-600">Team 2</h3>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium mb-1">Giocatore 1</label>
+                <label className="block text-sm font-medium mb-1">Player 1</label>
                 <AutoCompleteInput
                   value={newMatch.team2Player1}
                   onChange={(value) => setNewMatch({...newMatch, team2Player1: value})}
-                  placeholder="Nome giocatore"
+                  placeholder="Player name"
                   className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                   players={players}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Giocatore 2</label>
+                <label className="block text-sm font-medium mb-1">Player 2</label>
                 <AutoCompleteInput
                   value={newMatch.team2Player2}
                   onChange={(value) => setNewMatch({...newMatch, team2Player2: value})}
-                  placeholder="Nome giocatore"
+                  placeholder="Player name"
                   className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                   players={players}
                 />
@@ -80,16 +80,16 @@ const NuovaPartitaTab: React.FC<NuovaPartitaTabProps> = ({
           </div>
         </div>
 
-        {/* Punteggio */}
+        {/* Final Score */}
         <div className="mt-6">
-          <label className="block text-sm font-medium mb-3">Punteggio Finale</label>
+          <label className="block text-sm font-medium mb-3">Final Score</label>
           <div className="grid grid-cols-2 gap-4">
             <div className="p-4 border-2 border-blue-200 rounded-lg bg-blue-50">
               <div className="font-semibold text-blue-700 mb-2">Team 1</div>
               <div className="text-sm text-blue-600 mb-3">
                 {newMatch.team1Player1 && newMatch.team1Player2 
                   ? `${newMatch.team1Player1} & ${newMatch.team1Player2}`
-                  : 'Inserisci i nomi'
+                  : 'Enter names'
                 }
               </div>
               <input
@@ -107,7 +107,7 @@ const NuovaPartitaTab: React.FC<NuovaPartitaTabProps> = ({
               <div className="text-sm text-red-600 mb-3">
                 {newMatch.team2Player1 && newMatch.team2Player2 
                   ? `${newMatch.team2Player1} & ${newMatch.team2Player2}`
-                  : 'Inserisci i nomi'
+                  : 'Enter names'
                 }
               </div>
               <input
@@ -123,7 +123,7 @@ const NuovaPartitaTab: React.FC<NuovaPartitaTabProps> = ({
           </div>
           {newMatch.team1Score === newMatch.team2Score && (newMatch.team1Score > 0 || newMatch.team2Score > 0) && (
             <div className="mt-2 text-center text-sm text-amber-600">
-              ⚠️ I punteggi non possono essere uguali
+              ⚠️ Scores cannot be equal
             </div>
           )}
         </div>
@@ -132,11 +132,11 @@ const NuovaPartitaTab: React.FC<NuovaPartitaTabProps> = ({
           onClick={onAddMatch}
           className="w-full mt-6 bg-green-500 text-white py-3 rounded-lg hover:bg-green-600 transition-colors font-semibold"
         >
-          Aggiungi Partita
+          Add Match
         </button>
       </div>
     </div>
   );
 };
 
-export default NuovaPartitaTab; 
+export default NewMatchTab; 
