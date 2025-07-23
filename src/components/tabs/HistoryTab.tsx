@@ -1,6 +1,7 @@
 import React from 'react';
 import { Clock, Trash2 } from 'lucide-react';
 import { Player, Match } from '../../types/foosball';
+import { useAuth } from '../../hooks/useAuth';
 
 interface HistoryTabProps {
   players: Player[];
@@ -21,7 +22,29 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
   onDeleteMatch,
   onBackToRankings
 }) => {
+  const { user, permissions } = useAuth();
   const sortedPlayers = [...players].sort((a, b) => b.elo - a.elo);
+
+  // Helper function to check if current user can delete a match
+  const canDeleteMatch = (match: Match): boolean => {
+    if (!user) return false;
+    
+    // Superusers can delete any match
+    if (permissions.canDeleteAnyMatch) return true;
+    
+    // Regular users can only delete their own matches
+    if (permissions.canDeleteOwnMatches && match.createdBy === user.id) return true;
+    
+    return false;
+  };
+
+  // Helper function to get creator info for display
+  const getCreatorDisplay = (match: Match): string => {
+    if (!match.createdBy || !user) return '';
+    if (match.createdBy === user.id) return 'Added by you';
+    if (permissions.canDeleteAnyMatch) return `Added by User ID: ${match.createdBy}`;
+    return '';
+  };
 
   return (
     <div className="space-y-4">
@@ -87,12 +110,15 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
         </div>
       )}
 
-      {matches.length > 0 && (
+      {matches.length > 0 && (permissions.canDeleteAnyMatch || permissions.canDeleteOwnMatches) && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
           <div className="flex items-center gap-2 text-blue-700">
             <Trash2 className="w-4 h-4" />
             <span className="text-sm">
-              <strong>Note:</strong> You can delete any match by clicking the trash icon. ELO and statistics will be automatically restored.
+              <strong>Note:</strong> {permissions.canDeleteAnyMatch 
+                ? 'You can delete any match by clicking the trash icon.' 
+                : 'You can delete matches you created by clicking the trash icon.'
+              } ELO and statistics will be automatically restored.
             </span>
           </div>
         </div>
@@ -121,7 +147,12 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
             <div key={match.id} className="bg-white rounded-lg p-4 shadow-sm border">
               <div className="flex justify-between items-start mb-3">
                 <div className="text-sm text-gray-500">
-                  {match.date} • {match.time}
+                  <div>{match.date} • {match.time}</div>
+                  {getCreatorDisplay(match) && (
+                    <div className="text-xs text-blue-600 mt-1">
+                      {getCreatorDisplay(match)}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="text-lg font-bold text-gray-800">
@@ -130,13 +161,15 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                       ({match.winner === 'team1' ? 'Team 1' : 'Team 2'} wins)
                     </span>
                   </div>
-                  <button
-                    onClick={() => onDeleteMatch(match)}
-                    className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
-                    title="Delete match"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {canDeleteMatch(match) && (
+                    <button
+                      onClick={() => onDeleteMatch(match)}
+                      className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                      title={permissions.canDeleteAnyMatch ? "Delete match" : "Delete your match"}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
               
