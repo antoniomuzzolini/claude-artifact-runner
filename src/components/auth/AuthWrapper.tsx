@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import LoginForm from './LoginForm';
 import AuthSetup from './AuthSetup';
+import CompleteInvitation from './CompleteInvitation';
 
 interface AuthWrapperProps {
   children: React.ReactNode;
@@ -11,11 +12,22 @@ const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
   const { isAuthenticated, isLoading, error, login, clearError } = useAuth();
   const [needsSetup, setNeedsSetup] = useState(false);
   const [checkingSetup, setCheckingSetup] = useState(true);
+  const [invitationToken, setInvitationToken] = useState<string | null>(null);
 
   const API_BASE = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3000';
 
-  // Check if authentication setup is needed
+  // Check if authentication setup is needed and handle invitation tokens
   useEffect(() => {
+    // Check for invitation token in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    
+    if (token && window.location.pathname === '/complete-invitation') {
+      setInvitationToken(token);
+      setCheckingSetup(false);
+      return;
+    }
+
     const checkAuthSetup = async () => {
       try {
         const response = await fetch(`${API_BASE}/api/setup-auth`);
@@ -63,6 +75,13 @@ const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
     window.location.reload();
   };
 
+  const handleInvitationComplete = () => {
+    setInvitationToken(null);
+    // Clear URL params and redirect to login
+    window.history.replaceState({}, document.title, '/');
+    window.location.reload();
+  };
+
   // Show loading spinner while checking setup or auth
   if (checkingSetup || isLoading) {
     return (
@@ -73,6 +92,11 @@ const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
         </div>
       </div>
     );
+  }
+
+  // Show invitation completion screen if token is present
+  if (invitationToken) {
+    return <CompleteInvitation token={invitationToken} onComplete={handleInvitationComplete} />;
   }
 
   // Show setup screen if needed

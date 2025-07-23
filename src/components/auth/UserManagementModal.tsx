@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, UserPlus, Mail, User, Shield, Trash2, Eye, EyeOff } from 'lucide-react';
+import { X, UserPlus, Mail, User, Shield, Trash2, Copy, Clock } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { User as UserType } from '../../types/auth';
 
@@ -9,18 +9,16 @@ interface UserManagementModalProps {
 }
 
 const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose }) => {
-  const { createUser, makeAuthenticatedRequest } = useAuth();
+  const { inviteUser, makeAuthenticatedRequest } = useAuth();
   const [users, setUsers] = useState<UserType[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [invitationUrl, setInvitationUrl] = useState<string | null>(null);
 
-  // Create user form state
+  // Invite user form state
   const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserUsername, setNewUserUsername] = useState('');
-  const [newUserPassword, setNewUserPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
 
   // Fetch users when modal opens
   useEffect(() => {
@@ -51,39 +49,40 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
     }
   };
 
-  const handleCreateUser = async (e: React.FormEvent) => {
+  const handleInviteUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (!newUserEmail.trim() || !newUserUsername.trim() || !newUserPassword.trim()) {
-      setError('All fields are required');
+    if (!newUserEmail.trim()) {
+      setError('Email address is required');
       return;
     }
 
-    if (newUserPassword.length < 6) {
-      setError('Password must be at least 6 characters long');
-      return;
-    }
-
-    setIsCreating(true);
+    setIsInviting(true);
 
     try {
-      const success = await createUser(newUserEmail.trim(), newUserUsername.trim(), newUserPassword);
+      const result = await inviteUser(newUserEmail.trim());
       
-      if (success) {
+      if (result.success) {
+        // Show invitation URL
+        setInvitationUrl(result.invitationUrl || '');
+        
         // Reset form
         setNewUserEmail('');
-        setNewUserUsername('');
-        setNewUserPassword('');
-        setShowCreateForm(false);
         
         // Refresh users list
         await fetchUsers();
       }
     } catch (error) {
-      console.error('Error creating user:', error);
+      console.error('Error inviting user:', error);
     } finally {
-      setIsCreating(false);
+      setIsInviting(false);
+    }
+  };
+
+  const copyInvitationUrl = () => {
+    if (invitationUrl) {
+      navigator.clipboard.writeText(invitationUrl);
     }
   };
 
@@ -138,30 +137,28 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
             </div>
           )}
 
-          {/* Create User Button */}
-          {!showCreateForm && (
+          {/* Invite User Button */}
+          {!showInviteForm && !invitationUrl && (
             <div className="mb-6">
               <button
-                onClick={() => setShowCreateForm(true)}
+                onClick={() => setShowInviteForm(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
               >
                 <UserPlus className="w-4 h-4" />
-                Add New User
+                Invite New User
               </button>
             </div>
           )}
 
-          {/* Create User Form */}
-          {showCreateForm && (
+          {/* Invite User Form */}
+          {showInviteForm && (
             <div className="bg-gray-50 rounded-lg p-4 mb-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-medium text-gray-900">Create New User</h3>
+                <h3 className="font-medium text-gray-900">Invite New User</h3>
                 <button
                   onClick={() => {
-                    setShowCreateForm(false);
+                    setShowInviteForm(false);
                     setNewUserEmail('');
-                    setNewUserUsername('');
-                    setNewUserPassword('');
                     setError(null);
                   }}
                   className="text-gray-400 hover:text-gray-600"
@@ -170,7 +167,13 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
                 </button>
               </div>
 
-              <form onSubmit={handleCreateUser} className="space-y-4">
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                <p className="text-sm text-blue-700">
+                  <strong>New workflow:</strong> Just enter the user's email address. They'll receive an invitation link to set up their own username and password.
+                </p>
+              </div>
+
+              <form onSubmit={handleInviteUser} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Email Address
@@ -181,72 +184,70 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
                     onChange={(e) => setNewUserEmail(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="user@example.com"
-                    disabled={isCreating}
+                    disabled={isInviting}
                     required
                   />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Username
-                  </label>
-                  <input
-                    type="text"
-                    value={newUserUsername}
-                    onChange={(e) => setNewUserUsername(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="username"
-                    disabled={isCreating}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={newUserPassword}
-                      onChange={(e) => setNewUserPassword(e.target.value)}
-                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Create a secure password"
-                      disabled={isCreating}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                      disabled={isCreating}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4 text-gray-400" />
-                      ) : (
-                        <Eye className="h-4 w-4 text-gray-400" />
-                      )}
-                    </button>
-                  </div>
                 </div>
 
                 <div className="flex gap-2">
                   <button
                     type="submit"
-                    disabled={isCreating}
+                    disabled={isInviting}
                     className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
                   >
-                    {isCreating ? 'Creating...' : 'Create User'}
+                    {isInviting ? 'Sending Invitation...' : 'Send Invitation'}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowCreateForm(false)}
+                    onClick={() => setShowInviteForm(false)}
                     className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
                   >
                     Cancel
                   </button>
                 </div>
               </form>
+            </div>
+          )}
+
+          {/* Invitation URL Display */}
+          {invitationUrl && (
+            <div className="bg-green-50 rounded-lg p-4 mb-6 border border-green-200">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-medium text-green-900">Invitation Sent Successfully!</h3>
+                <button
+                  onClick={() => {
+                    setInvitationUrl(null);
+                    setShowInviteForm(false);
+                  }}
+                  className="text-green-600 hover:text-green-800"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <p className="text-sm text-green-700 mb-3">
+                Share this invitation link with the new user. They'll use it to set up their username and password:
+              </p>
+
+              <div className="flex items-center gap-2 bg-white border border-green-300 rounded-md p-2">
+                <input
+                  type="text"
+                  value={invitationUrl}
+                  readOnly
+                  className="flex-1 text-sm bg-transparent border-none outline-none"
+                />
+                <button
+                  onClick={copyInvitationUrl}
+                  className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
+                >
+                  <Copy className="w-3 h-3" />
+                  Copy
+                </button>
+              </div>
+
+              <p className="text-xs text-green-600 mt-2">
+                💡 The invitation link expires in 7 days. The user will appear as "Pending" until they complete setup.
+              </p>
             </div>
           )}
 
@@ -272,7 +273,9 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
                   >
                     <div className="flex items-center gap-3">
                       <div className="flex-shrink-0">
-                        {user.role === 'superuser' ? (
+                        {user.status === 'pending' ? (
+                          <Clock className="w-5 h-5 text-yellow-600" />
+                        ) : user.role === 'superuser' ? (
                           <Shield className="w-5 h-5 text-purple-600" />
                         ) : (
                           <User className="w-5 h-5 text-blue-600" />
@@ -288,20 +291,39 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
                           }`}>
                             {user.role === 'superuser' ? 'Admin' : 'User'}
                           </span>
+                          {user.status === 'pending' && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                              Pending Setup
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-1 text-sm text-gray-500">
                           <Mail className="w-3 h-3" />
                           {user.email}
                         </div>
-                        {user.last_login && (
+                        {user.status === 'active' && user.last_login && (
                           <div className="text-xs text-gray-400">
                             Last login: {new Date(user.last_login).toLocaleDateString()}
+                          </div>
+                        )}
+                        {user.status === 'pending' && (
+                          <div className="text-xs text-yellow-600">
+                            Waiting for user to complete setup
                           </div>
                         )}
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {user.status === 'pending' && user.invitation_token && (
+                        <button
+                          onClick={() => setInvitationUrl(`${window.location.origin}/complete-invitation?token=${user.invitation_token}`)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                          title="Show invitation link"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                      )}
                       {user.role !== 'superuser' && (
                         <button
                           onClick={() => handleDeleteUser(user.id, user.username)}

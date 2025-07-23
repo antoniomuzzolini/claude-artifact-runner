@@ -41,7 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'GET') {
       // List all users
       const users = await sql`
-        SELECT id, email, username, role, created_at, last_login, created_by
+        SELECT id, email, username, role, status, created_at, last_login, created_by, invitation_token
         FROM users 
         ORDER BY created_at DESC;
       `;

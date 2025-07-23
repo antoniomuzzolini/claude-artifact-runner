@@ -69,10 +69,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           username VARCHAR(255) UNIQUE NOT NULL,
           password_hash VARCHAR(255) NOT NULL,
           role VARCHAR(50) DEFAULT 'user',
+          status VARCHAR(50) DEFAULT 'active',
           created_at TIMESTAMP DEFAULT NOW(),
           created_by INTEGER REFERENCES users(id),
-          last_login TIMESTAMP
+          last_login TIMESTAMP,
+          invitation_token TEXT
         );
+      `;
+
+      // Add new columns to existing table
+      await sql`
+        ALTER TABLE users 
+        ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active';
+      `;
+      
+      await sql`
+        ALTER TABLE users 
+        ADD COLUMN IF NOT EXISTS invitation_token TEXT;
       `;
 
       // Add created_by column to matches table
@@ -92,8 +105,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const username = adminEmail.split('@')[0]; // Use email prefix as username
 
         await sql`
-          INSERT INTO users (email, username, password_hash, role)
-          VALUES (${adminEmail}, ${username}, ${hashedPassword}, 'superuser');
+          INSERT INTO users (email, username, password_hash, role, status)
+          VALUES (${adminEmail}, ${username}, ${hashedPassword}, 'superuser', 'active');
         `;
 
         return res.status(200).json({

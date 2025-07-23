@@ -5,9 +5,11 @@ export interface User {
   email: string;
   username: string;
   role: 'superuser' | 'user';
+  status: 'active' | 'pending' | 'suspended';
   created_at: string;
   created_by?: number;
   last_login?: string;
+  invitation_token?: string;
 }
 
 export interface LoginCredentials {
@@ -22,12 +24,23 @@ export interface RegisterUser {
   role?: 'user'; // Only superuser can create other superusers
 }
 
+export interface InviteUser {
+  email: string;
+}
+
+export interface CompleteInvitation {
+  token: string;
+  username: string;
+  password: string;
+}
+
 export interface AuthResponse {
   success: boolean;
   user?: User;
   token?: string;
   message?: string;
   error?: string;
+  invitationUrl?: string;
 }
 
 export interface AuthContext {

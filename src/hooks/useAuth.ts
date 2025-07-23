@@ -134,10 +134,10 @@ export const useAuth = () => {
     }
   }, [token, logout]);
 
-  const createUser = useCallback(async (email: string, username: string, password: string): Promise<boolean> => {
+  const inviteUser = useCallback(async (email: string): Promise<{ success: boolean; invitationUrl?: string }> => {
     if (!token) {
       setError('Authentication required');
-      return false;
+      return { success: false };
     }
 
     try {
@@ -148,8 +148,36 @@ export const useAuth = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          action: 'register',
+          action: 'invite',
           email,
+        }),
+      });
+
+      const data: AuthResponse = await response.json();
+
+      if (data.success) {
+        return { success: true, invitationUrl: data.invitationUrl };
+      } else {
+        setError(data.error || 'Failed to invite user');
+        return { success: false };
+      }
+    } catch (error) {
+      console.error('Invite user error:', error);
+      setError('Network error during user invitation');
+      return { success: false };
+    }
+  }, [token]);
+
+  const completeInvitation = useCallback(async (token: string, username: string, password: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`${API_BASE}/api/auth`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'complete-invitation',
+          token,
           username,
           password,
         }),
@@ -160,15 +188,15 @@ export const useAuth = () => {
       if (data.success) {
         return true;
       } else {
-        setError(data.error || 'Failed to create user');
+        setError(data.error || 'Failed to complete invitation');
         return false;
       }
     } catch (error) {
-      console.error('Create user error:', error);
-      setError('Network error during user creation');
+      console.error('Complete invitation error:', error);
+      setError('Network error during invitation completion');
       return false;
     }
-  }, [token]);
+  }, []);
 
   // Get user permissions
   const permissions = user ? getPermissions(user.role) : getPermissions('');
@@ -208,7 +236,8 @@ export const useAuth = () => {
     login,
     logout,
     refreshUser,
-    createUser,
+    inviteUser,
+    completeInvitation,
     makeAuthenticatedRequest,
     clearError: () => setError(null),
   };
