@@ -25,7 +25,7 @@ import StorageTab from '../components/tabs/StorageTab';
 import UserMenu from '../components/auth/UserMenu';
 import AuthWrapper from '../components/auth/AuthWrapper';
 
-const FoosballManager = () => {
+const ChampionshipManager = () => {
   // Use authentication context
   const { user, permissions, organization } = useAuth();
   
@@ -303,8 +303,8 @@ const FoosballManager = () => {
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div className="text-center flex-1">
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">🏆 Foosball Manager</h1>
-            <p className="text-gray-600">Manage your office's ELO rankings</p>
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">🏆 Championship Manager</h1>
+            <p className="text-gray-600">Manage your ELO rankings and competitions</p>
           </div>
           <div className="flex items-center gap-4">
             <UserMenu />
@@ -525,10 +525,10 @@ const FoosballManager = () => {
 };
 
 // Wrap the component with authentication
-const AuthenticatedFoosballManager = () => (
+const AuthenticatedChampionshipManager = () => (
   <AuthWrapper>
-    <FoosballManager />
+    <ChampionshipManager />
   </AuthWrapper>
 );
 
-export default AuthenticatedFoosballManager;
+export default AuthenticatedChampionshipManager;

@@ -241,8 +241,8 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
                   <button
                     onClick={() => {
                       // Opens the user's default email client with pre-filled invitation
-                      const subject = 'Invitation to join Foosball Championship';
-                      const body = `You've been invited to join our Foosball Championship app!\n\nClick this link to complete your registration:\n${invitationUrl}\n\nThis invitation expires in 7 days.`;
+                      const subject = 'Invitation to join Championship';
+                      const body = `You've been invited to join our Championship app!\n\nClick this link to complete your registration:\n${invitationUrl}\n\nThis invitation expires in 7 days.`;
                       const mailtoLink = `mailto:${invitedUserEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
                       window.open(mailtoLink, '_blank');
                     }}

@@ -58,7 +58,7 @@ const OrganizationSetup: React.FC<OrganizationSetupProps> = ({
         <div className="text-center">
           <div className="text-4xl mb-4">🏢</div>
           <h2 className="text-3xl font-bold text-gray-900">Create Organization</h2>
-          <p className="mt-2 text-sm text-gray-600">Set up your foosball organization and admin account</p>
+          <p className="mt-2 text-sm text-gray-600">Set up your championship organization and admin account</p>
         </div>
 
         {/* Form */}
@@ -249,7 +249,7 @@ const OrganizationSetup: React.FC<OrganizationSetupProps> = ({
               <li>Your organization will be created</li>
               <li>You'll become the organization administrator</li>
               <li>You can invite other users to join your organization</li>
-              <li>All foosball data will be isolated to your organization</li>
+              <li>All championship data will be isolated to your organization</li>
             </ul>
           </div>
         </div>

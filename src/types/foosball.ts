@@ -1,4 +1,4 @@
-// Type definitions for Foosball Manager application
+// Type definitions for Championship Manager application
 
 export interface Organization {
   id: number;

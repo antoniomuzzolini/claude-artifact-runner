@@ -1,4 +1,4 @@
-// Authentication types for the Foosball Manager application
+// Authentication types for the Championship Manager application
 
 import { Organization } from './foosball';
 

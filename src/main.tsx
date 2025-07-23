@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import Layout from './components/layout';
 import CompleteInvitationPage from './pages/invitation';
-import FoosballApp from './artifacts/index';
+import ChampionshipApp from './artifacts/index';
 import './index.css';
 
 const router = createBrowserRouter([
@@ -13,11 +13,11 @@ const router = createBrowserRouter([
   },
   {
     path: '/',
-    element: <Layout><FoosballApp /></Layout>,
+    element: <Layout><ChampionshipApp /></Layout>,
   },
   {
     path: '*',
-    element: <Layout><FoosballApp /></Layout>,
+    element: <Layout><ChampionshipApp /></Layout>,
   }
 ], {
   future: {

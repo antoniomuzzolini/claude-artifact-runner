@@ -116,7 +116,7 @@ const AuthSetup: React.FC<AuthSetupProps> = ({ onSetupComplete }) => {
           <Shield className="mx-auto h-12 w-12 text-blue-600" />
           <h2 className="mt-6 text-3xl font-bold text-gray-900">Authentication Setup</h2>
           <p className="mt-2 text-sm text-gray-600">
-            Create the first administrator account for your Foosball Manager
+            Create the first administrator account for your Championship Manager
           </p>
         </div>
 

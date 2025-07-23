@@ -16,9 +16,9 @@ export const useAuth = () => {
   // Initialize auth from localStorage
   useEffect(() => {
     const initAuth = async () => {
-      const storedToken = localStorage.getItem('foosball_token');
-      const storedUser = localStorage.getItem('foosball_user');
-      const storedOrganization = localStorage.getItem('foosball_organization');
+      const storedToken = localStorage.getItem('championship_token');
+      const storedUser = localStorage.getItem('championship_user');
+      const storedOrganization = localStorage.getItem('championship_organization');
 
       if (storedToken && storedUser) {
         try {
@@ -39,21 +39,21 @@ export const useAuth = () => {
               setOrganization(data.organization || (storedOrganization ? JSON.parse(storedOrganization) : null));
             } else {
               // Token invalid, clear storage
-              localStorage.removeItem('foosball_token');
-              localStorage.removeItem('foosball_user');
-              localStorage.removeItem('foosball_organization');
+              localStorage.removeItem('championship_token');
+              localStorage.removeItem('championship_user');
+              localStorage.removeItem('championship_organization');
             }
           } else {
             // Token invalid, clear storage
-            localStorage.removeItem('foosball_token');
-            localStorage.removeItem('foosball_user');
-            localStorage.removeItem('foosball_organization');
+            localStorage.removeItem('championship_token');
+            localStorage.removeItem('championship_user');
+            localStorage.removeItem('championship_organization');
           }
         } catch (error) {
           console.error('Auth initialization error:', error);
-          localStorage.removeItem('foosball_token');
-          localStorage.removeItem('foosball_user');
-          localStorage.removeItem('foosball_organization');
+          localStorage.removeItem('championship_token');
+          localStorage.removeItem('championship_user');
+          localStorage.removeItem('championship_organization');
         }
       }
 
@@ -83,10 +83,10 @@ export const useAuth = () => {
 
       if (data.success && data.user && data.token) {
         // Store in localStorage
-        localStorage.setItem('foosball_token', data.token);
-        localStorage.setItem('foosball_user', JSON.stringify(data.user));
+        localStorage.setItem('championship_token', data.token);
+        localStorage.setItem('championship_user', JSON.stringify(data.user));
         if (data.organization) {
-          localStorage.setItem('foosball_organization', JSON.stringify(data.organization));
+          localStorage.setItem('championship_organization', JSON.stringify(data.organization));
         }
         
         // Update state
@@ -132,9 +132,9 @@ export const useAuth = () => {
 
       if (responseData.success && responseData.user && responseData.token && responseData.organization) {
         // Store in localStorage
-        localStorage.setItem('foosball_token', responseData.token);
-        localStorage.setItem('foosball_user', JSON.stringify(responseData.user));
-        localStorage.setItem('foosball_organization', JSON.stringify(responseData.organization));
+        localStorage.setItem('championship_token', responseData.token);
+        localStorage.setItem('championship_user', JSON.stringify(responseData.user));
+        localStorage.setItem('championship_organization', JSON.stringify(responseData.organization));
         
         // Update state
         setToken(responseData.token);
@@ -157,9 +157,9 @@ export const useAuth = () => {
 
   const logout = useCallback(() => {
     // Clear localStorage
-    localStorage.removeItem('foosball_token');
-    localStorage.removeItem('foosball_user');
-    localStorage.removeItem('foosball_organization');
+    localStorage.removeItem('championship_token');
+    localStorage.removeItem('championship_user');
+    localStorage.removeItem('championship_organization');
     
     // Clear state
     setToken(null);
@@ -185,9 +185,9 @@ export const useAuth = () => {
       if (data.success && data.user) {
         setUser(data.user);
         setOrganization(data.organization || null);
-        localStorage.setItem('foosball_user', JSON.stringify(data.user));
+        localStorage.setItem('championship_user', JSON.stringify(data.user));
         if (data.organization) {
-          localStorage.setItem('foosball_organization', JSON.stringify(data.organization));
+          localStorage.setItem('championship_organization', JSON.stringify(data.organization));
         }
       } else {
         // Token invalid, logout

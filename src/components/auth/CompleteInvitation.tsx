@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Eye, EyeOff, CheckCircle, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 
 interface CompleteInvitationProps {
@@ -135,30 +135,16 @@ const CompleteInvitation: React.FC<CompleteInvitationProps> = ({ token, onComple
     );
   }
 
-  // Get email from token for display
-  let invitedEmail = '';
-  try {
-    const tokenPayload = JSON.parse(atob(token.split('.')[1]));
-    invitedEmail = tokenPayload.email || '';
-  } catch (error) {
-    // Already handled above
-  }
-
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="max-w-md w-full space-y-8 p-8">
         {/* Header */}
         <div className="text-center">
-          <Shield className="mx-auto h-12 w-12 text-blue-600" />
-          <h2 className="mt-6 text-3xl font-bold text-gray-900">Complete Your Account</h2>
+          <div className="text-4xl mb-4">✉️</div>
+          <h2 className="text-3xl font-bold text-gray-900">Complete Your Invitation</h2>
           <p className="mt-2 text-sm text-gray-600">
-            You've been invited to join the Foosball Manager
+            You've been invited to join the Championship Manager
           </p>
-          {invitedEmail && (
-            <p className="mt-1 text-sm text-blue-600 font-medium">
-              {invitedEmail}
-            </p>
-          )}
         </div>
 
         {/* Form */}
@@ -258,15 +244,15 @@ const CompleteInvitation: React.FC<CompleteInvitationProps> = ({ token, onComple
           </div>
         </form>
 
-        {/* Info */}
-        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
-          <div className="text-sm text-blue-700">
-            <p className="font-medium mb-1">Welcome to the team! 🏆</p>
-            <p>Once you complete setup, you'll be able to:</p>
-            <ul className="list-disc list-inside mt-1 space-y-1">
-              <li>View foosball rankings and match history</li>
+        {/* Features info */}
+        <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-md">
+          <div className="text-sm text-green-700">
+            <p className="font-medium mb-1">What you can do:</p>
+            <ul className="list-disc list-inside space-y-1">
+              <li>View rankings and match history</li>
               <li>Add new matches and track scores</li>
-              <li>Delete matches you create</li>
+              <li>Export and import championship data</li>
+              <li>Participate in organization competitions</li>
             </ul>
           </div>
         </div>

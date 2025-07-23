@@ -38,7 +38,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
         {/* Header */}
         <div className="text-center">
           <div className="text-4xl mb-4">🏆</div>
-          <h2 className="text-3xl font-bold text-gray-900">Foosball Manager</h2>
+          <h2 className="text-3xl font-bold text-gray-900">Championship Manager</h2>
           <p className="mt-2 text-sm text-gray-600">Sign in to your account</p>
         </div>
 
@@ -149,7 +149,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
         <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
           <div className="text-sm text-blue-700">
             <p className="font-medium mb-1">Getting Started:</p>
-            <p>Sign in to your organization account, or register a new organization to get started with foosball tracking.</p>
+            <p>Sign in to your organization account, or register a new organization to get started with championship tracking.</p>
           </div>
         </div>
       </div>
