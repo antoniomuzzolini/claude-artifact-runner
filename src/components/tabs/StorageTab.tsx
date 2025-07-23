@@ -1,6 +1,6 @@
 import React from 'react';
 import { Save, Download, Upload } from 'lucide-react';
-import { Player, Match, AppData } from '../../types/foosball';
+import { Player, Match } from '../../types/foosball';
 
 interface StorageTabProps {
   players: Player[];

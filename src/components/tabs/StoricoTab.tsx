@@ -8,7 +8,6 @@ interface StoricoTabProps {
   matchFilterPlayer: string;
   setMatchFilterPlayer: React.Dispatch<React.SetStateAction<string>>;
   filteredMatches: Match[];
-  onPlayerHistoryClick: (playerName: string) => void;
   onDeleteMatch: (match: Match) => void;
   onBackToClassifica: () => void;
 }
@@ -19,7 +18,6 @@ const StoricoTab: React.FC<StoricoTabProps> = ({
   matchFilterPlayer,
   setMatchFilterPlayer,
   filteredMatches,
-  onPlayerHistoryClick,
   onDeleteMatch,
   onBackToClassifica
 }) => {
