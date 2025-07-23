@@ -73,7 +73,7 @@ async function handleLogin(email: string, password: string, res: VercelResponse)
 
   // Find user by email
   const users = await sql`
-    SELECT id, email, username, password_hash, role, status, created_at, last_login
+    SELECT id, email, username, password_hash, role, status, created_at, last_login, organization_id
     FROM users 
     WHERE email = ${email}
     LIMIT 1;
@@ -96,6 +96,18 @@ async function handleLogin(email: string, password: string, res: VercelResponse)
     return res.status(401).json({ error: 'Invalid email or password' });
   }
 
+  // Get organization info if user belongs to one
+  let organization = null;
+  if (user.organization_id) {
+    const orgs = await sql`
+      SELECT id, name, domain, created_at, created_by
+      FROM organizations 
+      WHERE id = ${user.organization_id}
+      LIMIT 1;
+    `;
+    organization = orgs[0] || null;
+  }
+
   // Update last login
   await sql`
     UPDATE users 
@@ -108,7 +120,8 @@ async function handleLogin(email: string, password: string, res: VercelResponse)
     { 
       userId: user.id, 
       email: user.email, 
-      role: user.role 
+      role: user.role,
+      organizationId: user.organization_id
     },
     JWT_SECRET,
     { expiresIn: '7d' }
@@ -120,6 +133,7 @@ async function handleLogin(email: string, password: string, res: VercelResponse)
   return res.status(200).json({
     success: true,
     user: userWithoutPassword,
+    organization: organization,
     token,
     message: 'Login successful'
   });
@@ -163,11 +177,11 @@ async function handleRegister(email: string, username: string, password: string,
   // Hash password
   const hashedPassword = await bcrypt.hash(password, 12);
 
-  // Create user
+  // Create user in the same organization as the current user
   const newUsers = await sql`
-    INSERT INTO users (email, username, password_hash, role, created_by)
-    VALUES (${email}, ${username}, ${hashedPassword}, 'user', ${currentUser.userId})
-    RETURNING id, email, username, role, created_at;
+    INSERT INTO users (email, username, password_hash, role, created_by, organization_id)
+    VALUES (${email}, ${username}, ${hashedPassword}, 'user', ${currentUser.userId}, ${currentUser.organizationId})
+    RETURNING id, email, username, role, created_at, organization_id;
   `;
 
   const newUser = newUsers[0];
@@ -203,20 +217,20 @@ async function handleInviteUser(email: string, req: VercelRequest, res: VercelRe
     return res.status(401).json({ error: 'Invalid token' });
   }
 
-  // Check if user already exists
+  // Check if user already exists in this organization
   const existingUsers = await sql`
     SELECT id FROM users 
-    WHERE email = ${email}
+    WHERE email = ${email} AND organization_id = ${currentUser.organizationId}
     LIMIT 1;
   `;
 
   if (existingUsers.length > 0) {
-    return res.status(400).json({ error: 'User with this email already exists' });
+    return res.status(400).json({ error: 'User with this email already exists in your organization' });
   }
 
   // Generate invitation token
   const invitationToken = jwt.sign(
-    { email, invitedBy: currentUser.userId, type: 'invitation' },
+    { email, invitedBy: currentUser.userId, organizationId: currentUser.organizationId, type: 'invitation' },
     JWT_SECRET,
     { expiresIn: '7d' }
   );
@@ -226,14 +240,14 @@ async function handleInviteUser(email: string, req: VercelRequest, res: VercelRe
   let username = baseUsername;
   let counter = 1;
 
-  // Check for existing usernames and generate unique one
+  // Check for existing usernames in this organization and generate unique one
   while (true) {
     const existingUsername = await sql`
-      SELECT id FROM users WHERE username = ${username} LIMIT 1;
+      SELECT id FROM users WHERE username = ${username} AND organization_id = ${currentUser.organizationId} LIMIT 1;
     `;
     
     if (existingUsername.length === 0) {
-      break; // Username is unique
+      break; // Username is unique within this organization
     }
     
     username = `${baseUsername}${counter}`;
@@ -243,9 +257,9 @@ async function handleInviteUser(email: string, req: VercelRequest, res: VercelRe
   // Create pending user
   try {
     const newUsers = await sql`
-      INSERT INTO users (email, username, password_hash, role, status, created_by, invitation_token)
-      VALUES (${email}, ${username}, 'PENDING', 'user', 'pending', ${currentUser.userId}, ${invitationToken})
-      RETURNING id, email, username, role, status, created_at;
+      INSERT INTO users (email, username, password_hash, role, status, created_by, invitation_token, organization_id)
+      VALUES (${email}, ${username}, 'PENDING', 'user', 'pending', ${currentUser.userId}, ${invitationToken}, ${currentUser.organizationId})
+      RETURNING id, email, username, role, status, created_at, organization_id;
     `;
 
     const newUser = newUsers[0];
@@ -347,7 +361,7 @@ async function handleVerifyToken(token: string, res: VercelResponse) {
     
     // Get fresh user data from database
     const users = await sql`
-      SELECT id, email, username, role, status, created_at, last_login
+      SELECT id, email, username, role, status, created_at, last_login, organization_id
       FROM users 
       WHERE id = ${decoded.userId}
       LIMIT 1;
@@ -364,9 +378,22 @@ async function handleVerifyToken(token: string, res: VercelResponse) {
       return res.status(401).json({ error: 'Account not active' });
     }
 
+    // Get organization info if user belongs to one
+    let organization = null;
+    if (user.organization_id) {
+      const orgs = await sql`
+        SELECT id, name, domain, created_at, created_by
+        FROM organizations 
+        WHERE id = ${user.organization_id}
+        LIMIT 1;
+      `;
+      organization = orgs[0] || null;
+    }
+
     return res.status(200).json({
       success: true,
       user: user,
+      organization: organization,
       message: 'Token is valid'
     });
 

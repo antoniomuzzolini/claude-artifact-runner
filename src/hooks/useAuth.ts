@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { User, LoginCredentials, AuthResponse, getPermissions } from '../types/auth';
+import { User, LoginCredentials, AuthResponse, getPermissions, OrganizationSetupData } from '../types/auth';
+import { Organization } from '../types/foosball';
 
 const API_BASE = process.env.NODE_ENV === 'production' 
   ? '' 
@@ -7,6 +8,7 @@ const API_BASE = process.env.NODE_ENV === 'production'
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
+  const [organization, setOrganization] = useState<Organization | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -16,6 +18,7 @@ export const useAuth = () => {
     const initAuth = async () => {
       const storedToken = localStorage.getItem('foosball_token');
       const storedUser = localStorage.getItem('foosball_user');
+      const storedOrganization = localStorage.getItem('foosball_organization');
 
       if (storedToken && storedUser) {
         try {
@@ -33,20 +36,24 @@ export const useAuth = () => {
             if (data.success && data.user) {
               setToken(storedToken);
               setUser(data.user);
+              setOrganization(data.organization || (storedOrganization ? JSON.parse(storedOrganization) : null));
             } else {
               // Token invalid, clear storage
               localStorage.removeItem('foosball_token');
               localStorage.removeItem('foosball_user');
+              localStorage.removeItem('foosball_organization');
             }
           } else {
             // Token invalid, clear storage
             localStorage.removeItem('foosball_token');
             localStorage.removeItem('foosball_user');
+            localStorage.removeItem('foosball_organization');
           }
         } catch (error) {
           console.error('Auth initialization error:', error);
           localStorage.removeItem('foosball_token');
           localStorage.removeItem('foosball_user');
+          localStorage.removeItem('foosball_organization');
         }
       }
 
@@ -78,10 +85,14 @@ export const useAuth = () => {
         // Store in localStorage
         localStorage.setItem('foosball_token', data.token);
         localStorage.setItem('foosball_user', JSON.stringify(data.user));
+        if (data.organization) {
+          localStorage.setItem('foosball_organization', JSON.stringify(data.organization));
+        }
         
         // Update state
         setToken(data.token);
         setUser(data.user);
+        setOrganization(data.organization || null);
         setIsLoading(false);
         return true;
       } else {
@@ -97,14 +108,63 @@ export const useAuth = () => {
     }
   }, []);
 
+  const registerOrganization = useCallback(async (data: OrganizationSetupData): Promise<boolean> => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/api/organizations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'register',
+          organizationName: data.organizationName,
+          organizationDomain: data.organizationDomain,
+          adminEmail: data.adminEmail,
+          adminUsername: data.adminUsername,
+          adminPassword: data.adminPassword,
+        }),
+      });
+
+      const responseData: AuthResponse = await response.json();
+
+      if (responseData.success && responseData.user && responseData.token && responseData.organization) {
+        // Store in localStorage
+        localStorage.setItem('foosball_token', responseData.token);
+        localStorage.setItem('foosball_user', JSON.stringify(responseData.user));
+        localStorage.setItem('foosball_organization', JSON.stringify(responseData.organization));
+        
+        // Update state
+        setToken(responseData.token);
+        setUser(responseData.user);
+        setOrganization(responseData.organization);
+        setIsLoading(false);
+        return true;
+      } else {
+        setError(responseData.error || 'Organization registration failed');
+        setIsLoading(false);
+        return false;
+      }
+    } catch (error) {
+      console.error('Organization registration error:', error);
+      setError('Network error during organization registration');
+      setIsLoading(false);
+      return false;
+    }
+  }, []);
+
   const logout = useCallback(() => {
     // Clear localStorage
     localStorage.removeItem('foosball_token');
     localStorage.removeItem('foosball_user');
+    localStorage.removeItem('foosball_organization');
     
     // Clear state
     setToken(null);
     setUser(null);
+    setOrganization(null);
     setError(null);
   }, []);
 
@@ -124,7 +184,11 @@ export const useAuth = () => {
 
       if (data.success && data.user) {
         setUser(data.user);
+        setOrganization(data.organization || null);
         localStorage.setItem('foosball_user', JSON.stringify(data.user));
+        if (data.organization) {
+          localStorage.setItem('foosball_organization', JSON.stringify(data.organization));
+        }
       } else {
         // Token invalid, logout
         logout();
@@ -207,6 +271,9 @@ export const useAuth = () => {
   // Helper to check if user is superuser
   const isSuperuser = user?.role === 'superuser';
 
+  // Helper to check if user has organization
+  const hasOrganization = !!organization;
+
   // Helper to make authenticated API calls
   const makeAuthenticatedRequest = useCallback(async (url: string, options: RequestInit = {}) => {
     if (!token) {
@@ -227,13 +294,16 @@ export const useAuth = () => {
 
   return {
     user,
+    organization,
     token,
     isAuthenticated,
+    hasOrganization,
     isLoading,
     error,
     permissions,
     isSuperuser,
     login,
+    registerOrganization,
     logout,
     refreshUser,
     inviteUser,

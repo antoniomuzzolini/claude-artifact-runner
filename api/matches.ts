@@ -1,14 +1,16 @@
 import { neon } from '@neondatabase/serverless';
+import jwt from 'jsonwebtoken';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const sql = neon(process.env.DATABASE_URL!);
+const JWT_SECRET = process.env.JWT_SECRET || 'your-fallback-secret-key-change-in-production';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Add CORS headers
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT,HEAD');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -21,26 +23,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Verify authentication for all operations
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const token = authHeader.substring(7);
+    let currentUser;
+    
+    try {
+      currentUser = jwt.verify(token, JWT_SECRET) as any;
+    } catch (error) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    // Check if user has organization
+    if (!currentUser.organizationId) {
+      return res.status(403).json({ error: 'User must belong to an organization' });
+    }
+
     switch (req.method) {
       case 'GET':
-        // Get all matches
-        const matches = await sql`SELECT * FROM matches ORDER BY created_at DESC`;
+        // Get all matches for the user's organization
+        const matches = await sql`
+          SELECT * FROM matches 
+          WHERE organization_id = ${currentUser.organizationId}
+          ORDER BY created_at DESC
+        `;
         res.status(200).json(matches);
         break;
 
       case 'POST':
-        // Create or update matches (bulk operation)
+        // Create or update matches (bulk operation) within organization
         const { matches: matchesData } = req.body;
         
         if (!matchesData || !Array.isArray(matchesData)) {
           return res.status(400).json({ error: 'Invalid matches data' });
         }
 
-        // Upsert all matches
+        // Upsert all matches with organization and user context
         for (const match of matchesData) {
           await sql`
-            INSERT INTO matches (id, date, time, team1, team2, winner, team1_score, team2_score, elo_changes)
-            VALUES (${match.id}, ${match.date}, ${match.time}, ${match.team1}, ${match.team2}, ${match.winner}, ${match.team1Score}, ${match.team2Score}, ${JSON.stringify(match.eloChanges)})
+            INSERT INTO matches (id, date, time, team1, team2, winner, team1_score, team2_score, elo_changes, created_by, organization_id)
+            VALUES (${match.id}, ${match.date}, ${match.time}, ${match.team1}, ${match.team2}, ${match.winner}, ${match.team1Score}, ${match.team2Score}, ${JSON.stringify(match.eloChanges)}, ${match.createdBy || currentUser.userId}, ${currentUser.organizationId})
             ON CONFLICT (id) DO UPDATE SET
               date = EXCLUDED.date,
               time = EXCLUDED.time,
@@ -49,7 +75,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               winner = EXCLUDED.winner,
               team1_score = EXCLUDED.team1_score,
               team2_score = EXCLUDED.team2_score,
-              elo_changes = EXCLUDED.elo_changes
+              elo_changes = EXCLUDED.elo_changes,
+              created_by = EXCLUDED.created_by
+            WHERE matches.organization_id = ${currentUser.organizationId}
           `;
         }
 
@@ -57,8 +85,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         break;
 
       case 'DELETE':
-        // Clear all matches
-        await sql`DELETE FROM matches`;
+        // Clear all matches for the user's organization only
+        await sql`
+          DELETE FROM matches 
+          WHERE organization_id = ${currentUser.organizationId}
+        `;
         res.status(200).json({ success: true, message: 'All matches deleted' });
         break;
 

@@ -1,5 +1,7 @@
 // Authentication types for the Foosball Manager application
 
+import { Organization } from './foosball';
+
 export interface User {
   id: number;
   email: string;
@@ -10,6 +12,7 @@ export interface User {
   created_by?: number;
   last_login?: string;
   invitation_token?: string;
+  organization_id: number;
 }
 
 export interface LoginCredentials {
@@ -38,14 +41,16 @@ export interface AuthResponse {
   success: boolean;
   user?: User;
   token?: string;
-  message?: string;
   error?: string;
+  message?: string;
   invitationUrl?: string;
+  organization?: Organization;
 }
 
 export interface AuthContext {
   user: User | null;
   token: string | null;
+  organization: Organization | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (credentials: LoginCredentials) => Promise<boolean>;
@@ -62,6 +67,14 @@ export interface Permission {
   canManageUsers: boolean;
   canExportData: boolean;
   canResetData: boolean;
+}
+
+export interface OrganizationSetupData {
+  organizationName: string;
+  organizationDomain?: string;
+  adminEmail: string;
+  adminUsername: string;
+  adminPassword: string;
 }
 
 // Helper function to get permissions based on role

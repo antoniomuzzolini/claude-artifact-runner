@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AppData, Player, Match } from '../types/foosball';
-import { dbAPI } from '../lib/database';
+import { useAuth } from './useAuth';
 
 export const useNeonDB = () => {
+  const { makeAuthenticatedRequest, isAuthenticated } = useAuth();
   const [players, setPlayers] = useState<Player[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -12,6 +13,11 @@ export const useNeonDB = () => {
 
   // Save data directly to cloud database
   const saveData = useCallback(async () => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return false;
+    }
+
     if (!isOnline) {
       setError('Cannot save - database not available');
       return false;
@@ -21,20 +27,21 @@ export const useNeonDB = () => {
     setError(null);
     
     try {
-      const data: AppData = {
-        players,
-        matches,
-        lastSaved: new Date().toISOString()
-      };
-      
-      const success = await dbAPI.syncData(data);
-      
-      if (success) {
+      const response = await makeAuthenticatedRequest('/api/sync', {
+        method: 'POST',
+        body: JSON.stringify({
+          players,
+          matches
+        }),
+      });
+
+      if (response.ok) {
         setLastSaved(new Date());
         console.log('✅ Data saved to Neon DB');
         return true;
       } else {
-        setError('Failed to save data to database');
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to save data to database');
         return false;
       }
     } catch (error) {
@@ -44,46 +51,51 @@ export const useNeonDB = () => {
     } finally {
       setIsSyncing(false);
     }
-  }, [players, matches, isOnline]);
+  }, [players, matches, isOnline, isAuthenticated, makeAuthenticatedRequest]);
 
   // Load data directly from cloud database
   const loadData = useCallback(async () => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return;
+    }
+
     setIsSyncing(true);
     setError(null);
     
     try {
       // Check if we can connect to cloud
-      const cloudAvailable = await dbAPI.isOnline();
-      setIsOnline(cloudAvailable);
+      const response = await makeAuthenticatedRequest('/api/sync');
 
-      if (!cloudAvailable) {
-        setError('Database not available - please check your internet connection');
-        setIsSyncing(false);
-        return;
-      }
-
-      // Load from cloud database
-      const cloudData = await dbAPI.loadData();
-      
-      if (cloudData) {
-        setPlayers(cloudData.players || []);
-        setMatches(cloudData.matches || []);
-        setLastSaved(cloudData.lastSaved ? new Date(cloudData.lastSaved) : null);
-        console.log('☁️ Data loaded from Neon DB');
+      if (response.ok) {
+        setIsOnline(true);
+        const cloudData = await response.json();
+        
+        if (cloudData) {
+          setPlayers(cloudData.players || []);
+          setMatches(cloudData.matches || []);
+          setLastSaved(cloudData.lastSaved ? new Date(cloudData.lastSaved) : null);
+          console.log('☁️ Data loaded from Neon DB');
+        } else {
+          // No data in database yet - start fresh
+          setPlayers([]);
+          setMatches([]);
+          setLastSaved(null);
+          console.log('📊 No data found - starting fresh');
+        }
       } else {
-        // No data in database yet - start fresh
-        setPlayers([]);
-        setMatches([]);
-        setLastSaved(null);
-        console.log('📊 No data found - starting fresh');
+        setIsOnline(false);
+        const errorData = await response.json();
+        setError(errorData.error || 'Database not available - please check your connection');
       }
     } catch (error) {
       console.error('❌ Error loading data:', error);
+      setIsOnline(false);
       setError('Error loading data from database');
     } finally {
       setIsSyncing(false);
     }
-  }, []);
+  }, [isAuthenticated, makeAuthenticatedRequest]);
 
   // Export data to file
   const exportDataToFile = async () => {
@@ -114,6 +126,11 @@ export const useNeonDB = () => {
 
   // Import data from file
   const importDataFromFile = async (data: AppData) => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return;
+    }
+
     if (!isOnline) {
       setError('Cannot import - database not available');
       return;
@@ -129,15 +146,19 @@ export const useNeonDB = () => {
       setLastSaved(new Date());
       
       // Save to cloud database
-      const success = await dbAPI.syncData({
-        ...data,
-        lastSaved: new Date().toISOString()
+      const response = await makeAuthenticatedRequest('/api/sync', {
+        method: 'POST',
+        body: JSON.stringify({
+          players: data.players,
+          matches: data.matches
+        }),
       });
       
-      if (success) {
+      if (response.ok) {
         console.log('✅ Data imported and saved to Neon DB');
       } else {
-        setError('Failed to save imported data to database');
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to save imported data to database');
       }
     } catch (error) {
       console.error('❌ Error importing data:', error);
@@ -149,6 +170,11 @@ export const useNeonDB = () => {
 
   // Reset all data
   const resetAll = async () => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return;
+    }
+
     if (!isOnline) {
       setError('Cannot reset - database not available');
       return;
@@ -159,15 +185,18 @@ export const useNeonDB = () => {
     
     try {
       // Clear cloud data
-      const success = await dbAPI.clearData();
+      const response = await makeAuthenticatedRequest('/api/sync', {
+        method: 'DELETE',
+      });
       
-      if (success) {
+      if (response.ok) {
         setPlayers([]);
         setMatches([]);
         setLastSaved(null);
         console.log('✅ All data cleared from Neon DB');
       } else {
-        setError('Failed to clear data from database');
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to clear data from database');
       }
     } catch (error) {
       console.error('❌ Error resetting data:', error);
@@ -185,14 +214,24 @@ export const useNeonDB = () => {
 
   // Check connection status periodically
   useEffect(() => {
+    if (!isAuthenticated) return;
+
     const checkConnection = async () => {
-      const online = await dbAPI.isOnline();
-      setIsOnline(online);
-      
-      if (!online && !error) {
-        setError('Database connection lost');
-      } else if (online && error === 'Database connection lost') {
-        setError(null);
+      try {
+        const response = await makeAuthenticatedRequest('/api/sync');
+        const online = response.ok;
+        setIsOnline(online);
+        
+        if (!online && !error) {
+          setError('Database connection lost');
+        } else if (online && error === 'Database connection lost') {
+          setError(null);
+        }
+      } catch (error) {
+        setIsOnline(false);
+        if (error !== 'Database connection lost') {
+          setError('Database connection lost');
+        }
       }
     };
 
@@ -203,19 +242,21 @@ export const useNeonDB = () => {
     const interval = setInterval(checkConnection, 30000);
     
     return () => clearInterval(interval);
-  }, [error]);
+  }, [error, isAuthenticated, makeAuthenticatedRequest]);
 
-  // Auto-save when data changes (only if online)
+  // Auto-save when data changes (only if online and authenticated)
   useEffect(() => {
-    if ((players.length > 0 || matches.length > 0) && isOnline) {
+    if ((players.length > 0 || matches.length > 0) && isOnline && isAuthenticated) {
       saveData();
     }
-  }, [players, matches, isOnline, saveData]);
+  }, [players, matches, isOnline, isAuthenticated, saveData]);
 
-  // Load data on mount
+  // Load data on mount when authenticated
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (isAuthenticated) {
+      loadData();
+    }
+  }, [isAuthenticated, loadData]);
 
   return {
     players,

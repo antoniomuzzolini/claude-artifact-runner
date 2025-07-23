@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import LoginForm from './LoginForm';
 import AuthSetup from './AuthSetup';
+import OrganizationSetup from './OrganizationSetup';
 import CompleteInvitation from './CompleteInvitation';
 
 interface AuthWrapperProps {
@@ -9,10 +10,11 @@ interface AuthWrapperProps {
 }
 
 const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
-  const { isAuthenticated, isLoading, error, login, clearError } = useAuth();
+  const { isAuthenticated, isLoading, error, login, registerOrganization, clearError } = useAuth();
   const [needsSetup, setNeedsSetup] = useState(false);
   const [checkingSetup, setCheckingSetup] = useState(true);
   const [invitationToken, setInvitationToken] = useState<string | null>(null);
+  const [showOrganizationSetup, setShowOrganizationSetup] = useState(false);
 
   const API_BASE = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3000';
 
@@ -34,7 +36,7 @@ const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
         const data = await response.json();
         
         // If tables don't exist or no setup is complete, show setup screen
-        if (!data.usersTableExists || !data.matchesHasCreatedBy) {
+        if (!data.usersTableExists || !data.matchesHasCreatedBy || !data.organizationsTableExists) {
           setNeedsSetup(true);
         } else {
           // Tables exist, check if we can find any superuser
@@ -82,6 +84,23 @@ const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
     window.location.reload();
   };
 
+  const handleShowOrganizationSetup = () => {
+    setShowOrganizationSetup(true);
+  };
+
+  const handleBackToLogin = () => {
+    setShowOrganizationSetup(false);
+  };
+
+  const handleOrganizationSetup = async (data: any) => {
+    const success = await registerOrganization(data);
+    if (success) {
+      setShowOrganizationSetup(false);
+      // User will be automatically logged in after successful organization registration
+    }
+    return success;
+  };
+
   // Show loading spinner while checking setup or auth
   if (checkingSetup || isLoading) {
     return (
@@ -104,11 +123,25 @@ const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
     return <AuthSetup onSetupComplete={handleSetupComplete} />;
   }
 
+  // Show organization setup screen if requested
+  if (showOrganizationSetup) {
+    return (
+      <OrganizationSetup
+        onOrganizationSetup={handleOrganizationSetup}
+        onBackToLogin={handleBackToLogin}
+        isLoading={isLoading}
+        error={error}
+        onClearError={clearError}
+      />
+    );
+  }
+
   // Show login screen if not authenticated
   if (!isAuthenticated) {
     return (
       <LoginForm 
         onLogin={login} 
+        onRegisterOrganization={handleShowOrganizationSetup}
         isLoading={isLoading} 
         error={error} 
         onClearError={clearError} 

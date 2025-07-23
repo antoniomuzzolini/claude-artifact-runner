@@ -38,11 +38,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ error: 'Only administrators can manage users' });
     }
 
+    // Check if user has organization
+    if (!currentUser.organizationId) {
+      return res.status(403).json({ error: 'User must belong to an organization' });
+    }
+
     if (req.method === 'GET') {
-      // List all users
+      // List all users in the same organization
       const users = await sql`
-        SELECT id, email, username, role, status, created_at, last_login, created_by, invitation_token
+        SELECT id, email, username, role, status, created_at, last_login, created_by, invitation_token, organization_id
         FROM users 
+        WHERE organization_id = ${currentUser.organizationId}
         ORDER BY created_at DESC;
       `;
 
@@ -53,36 +59,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'DELETE') {
-      const { userId } = req.body;
+      const { userId } = req.query;
 
       if (!userId) {
         return res.status(400).json({ error: 'User ID is required' });
       }
 
-      // Prevent deleting superusers
-      const userToDelete = await sql`
-        SELECT id, role FROM users WHERE id = ${userId} LIMIT 1;
+      // Check if user exists and belongs to the same organization
+      const targetUsers = await sql`
+        SELECT id, email, username, role, organization_id
+        FROM users 
+        WHERE id = ${userId} AND organization_id = ${currentUser.organizationId}
+        LIMIT 1;
       `;
 
-      if (userToDelete.length === 0) {
-        return res.status(404).json({ error: 'User not found' });
+      if (targetUsers.length === 0) {
+        return res.status(404).json({ error: 'User not found in your organization' });
       }
 
-      if (userToDelete[0].role === 'superuser') {
-        return res.status(400).json({ error: 'Cannot delete administrator accounts' });
-      }
+      const targetUser = targetUsers[0];
 
-      // Prevent self-deletion
-      if (userId === currentUser.userId) {
+      // Prevent deleting yourself
+      if (targetUser.id === currentUser.userId) {
         return res.status(400).json({ error: 'Cannot delete your own account' });
       }
 
-      // Delete user
-      await sql`DELETE FROM users WHERE id = ${userId};`;
+      // Delete the user
+      await sql`
+        DELETE FROM users 
+        WHERE id = ${userId} AND organization_id = ${currentUser.organizationId};
+      `;
 
       return res.status(200).json({
         success: true,
-        message: 'User deleted successfully'
+        message: `User ${targetUser.username} deleted successfully`
       });
     }
 
@@ -92,7 +102,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     console.error('Users API error:', error);
     return res.status(500).json({ 
-      error: 'Failed to manage users',
+      error: 'User operation failed',
       message: error.message 
     });
   }
