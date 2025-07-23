@@ -369,7 +369,6 @@ const FoosballManager = () => {
               matchFilterPlayer={matchFilterPlayer}
               setMatchFilterPlayer={setMatchFilterPlayer}
               filteredMatches={filteredMatches}
-              onPlayerHistoryClick={goToPlayerHistory}
               onDeleteMatch={deleteMatch}
               onBackToClassifica={() => setActiveTab('classifica')}
             />
