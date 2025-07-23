@@ -1,0 +1,78 @@
+{
+  "dataConfig": {
+    "version": "1.0",
+    "storageTypes": {
+      "localStorage": {
+        "enabled": true,
+        "key": "foosballData",
+        "autoSave": true,
+        "description": "Browser-based persistent storage"
+      },
+      "fileSystem": {
+        "enabled": true,
+        "folder": "artifacts",
+        "autoSave": true,
+        "autoSaveInterval": 10,
+        "fileNamePattern": "foosball-data-{date}.json",
+        "description": "File-based storage in artifacts folder"
+      },
+      "backup": {
+        "enabled": true,
+        "fileNamePattern": "foosball-backup-{date}.json",
+        "includeMetadata": true,
+        "description": "Manual backup system"
+      }
+    },
+    "dataStructure": {
+      "players": {
+        "type": "array",
+        "description": "List of all registered players",
+        "fields": ["id", "name", "elo", "matches", "wins", "losses"]
+      },
+      "matches": {
+        "type": "array", 
+        "description": "Complete match history",
+        "fields": ["id", "date", "time", "team1", "team2", "winner", "eloChanges"]
+      },
+      "metadata": {
+        "type": "object",
+        "description": "System metadata",
+        "fields": ["lastSaved", "version", "exportDate"]
+      }
+    },
+    "eloSystem": {
+      "startingElo": 1200,
+      "kFactorNew": 40,
+      "kFactorExperienced": 32,
+      "kFactorVeteran": 24,
+      "experienceThreshold": 10,
+      "veteranThreshold": 20
+    },
+    "features": {
+      "autoSaveOnMatch": true,
+      "autoBackupEvery": 10,
+      "dataValidation": true,
+      "errorHandling": true,
+      "crossSessionSync": true
+    }
+  },
+  "artifactsFolder": {
+    "purpose": "Store application data files",
+    "structure": {
+      "index.tsx": "Main foosball manager application",
+      "foosball-data-sample.json": "Sample data structure",
+      "foosball-data-*.json": "Auto-saved data files",
+      "foosball-backup-*.json": "Manual backup files",
+      "README.md": "Documentation",
+      "data-config.json": "Configuration file"
+    },
+    "dataFlow": [
+      "User adds match -> Auto save to localStorage",
+      "Every 10 matches -> Auto save to file",
+      "Manual save -> Download to artifacts folder",
+      "Manual load -> Upload from artifacts folder",
+      "Export backup -> Download backup file",
+      "Import backup -> Load from backup file"
+    ]
+  }
+} 

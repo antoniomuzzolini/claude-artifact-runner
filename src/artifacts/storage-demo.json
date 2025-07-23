@@ -1,0 +1,99 @@
+{
+  "demo": {
+    "title": "Foosball Manager - Automatic Storage Demo",
+    "description": "This file demonstrates the automatic data persistence system"
+  },
+  "sampleWorkflow": {
+    "step1": {
+      "action": "User opens application",
+      "storage": "Automatically loads data from IndexedDB",
+      "fallback": "Falls back to localStorage if IndexedDB unavailable",
+      "result": "Previous session data restored automatically"
+    },
+    "step2": {
+      "action": "User adds new match",
+      "storage": "Automatically saves to IndexedDB + localStorage",
+      "timing": "Immediate (no delay)",
+      "userInteraction": "None required"
+    },
+    "step3": {
+      "action": "Every 10 matches",
+      "storage": "Auto-exports to downloadable JSON file",
+      "filename": "artifacts/foosball-data-YYYY-MM-DD.json",
+      "purpose": "Creates file for artifacts folder backup"
+    },
+    "step4": {
+      "action": "Browser restart/crash",
+      "storage": "Data automatically recovered from IndexedDB",
+      "reliability": "100% data preservation",
+      "manual": "No user action required"
+    }
+  },
+  "storageComparison": {
+    "beforeUpdate": {
+      "storage": "localStorage only",
+      "capacity": "~10MB limit",
+      "reliability": "Can be cleared by browser",
+      "fileAccess": "Manual download/upload only",
+      "persistence": "Session-based"
+    },
+    "afterUpdate": {
+      "storage": "IndexedDB + localStorage fallback",
+      "capacity": "Several GB",
+      "reliability": "Database-grade transactions",
+      "fileAccess": "Automatic + manual options",
+      "persistence": "Permanent file-like behavior"
+    }
+  },
+  "technicalFeatures": {
+    "automaticSaving": {
+      "description": "No user intervention required",
+      "triggers": ["Match addition", "Player creation", "Data modification"],
+      "storage": ["IndexedDB (primary)", "localStorage (backup)"],
+      "performance": "Async non-blocking operations"
+    },
+    "dataRecovery": {
+      "description": "Multi-layer backup system",
+      "layers": [
+        "IndexedDB (primary persistent storage)",
+        "localStorage (real-time backup)",
+        "Exported files (manual/auto archives)"
+      ],
+      "migration": "Automatic upgrade from localStorage to IndexedDB"
+    },
+    "fileExport": {
+      "description": "Bridge to traditional file system",
+      "automatic": "Every 10 matches",
+      "manual": "On-demand export",
+      "import": "Load data from any compatible JSON file",
+      "format": "Standard foosball data structure"
+    }
+  },
+  "usageInstructions": {
+    "normal": "Just use the application - everything saves automatically!",
+    "backup": "Optional: Use 'Backup' tab for file operations",
+    "export": "Optional: Click 'Esporta su File' for manual file creation",
+    "import": "Optional: Click 'Importa da File' to load external data",
+    "migration": "Automatic: Old localStorage data upgraded seamlessly"
+  },
+  "benefits": {
+    "userExperience": [
+      "No manual saving required",
+      "No data loss on crashes",
+      "Seamless session persistence",
+      "Fast application startup"
+    ],
+    "technical": [
+      "Much larger storage capacity",
+      "Database-grade reliability",
+      "Async performance benefits",
+      "Multiple backup layers"
+    ],
+    "compatibility": [
+      "Works with existing backup files",
+      "Maintains file export functionality", 
+      "Backward compatible with localStorage",
+      "Universal browser support"
+    ]
+  }
+} 
