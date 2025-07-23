@@ -8,7 +8,10 @@ export default defineConfig({
   plugins: [
     react(),
     Pages({
-      dirs: [{ dir: 'src/artifacts', baseRoute: '' }],
+      dirs: [
+        { dir: 'src/artifacts', baseRoute: '' },
+        { dir: 'src/pages', baseRoute: '' }
+      ],
       extensions: ['jsx', 'tsx'],   
     }),
   ],
