@@ -34,7 +34,7 @@ export const findOrCreatePlayer = (
   }
   
   const newPlayer: Player = {
-    id: Date.now() + Math.random(),
+    id: Date.now() + Math.floor(Math.random() * 1000),
     name: name.trim(),
     elo: 1200,
     matches: 0,
