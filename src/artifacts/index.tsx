@@ -5,7 +5,7 @@ import { TrendingUp, Save } from 'lucide-react';
 import { Player, Match, NewMatch, AppData } from '../types/foosball';
 
 // Import hooks
-import { useIndexedDB } from '../hooks/useIndexedDB';
+import { useNeonDB } from '../hooks/useNeonDB';
 
 // Import utilities
 import { 
@@ -23,17 +23,21 @@ import HistoryTab from '../components/tabs/HistoryTab';
 import StorageTab from '../components/tabs/StorageTab';
 
 const FoosballManager = () => {
-  // Use the custom hook for data management
+  // Use the simplified cloud-only data management
   const {
     players,
     matches,
     lastSaved,
+    isOnline,
+    isSyncing,
+    error,
     setPlayers,
     setMatches,
     exportDataToFile,
     importDataFromFile,
-    resetAll
-  } = useIndexedDB();
+    resetAll,
+    refreshData
+  } = useNeonDB();
 
   // Local state for UI
   const [newMatch, setNewMatch] = useState<NewMatch>({
@@ -331,17 +335,70 @@ const FoosballManager = () => {
           </div>
         </div>
 
-        {/* Status bar */}
-        {lastSaved && (
-          <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-6 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-purple-700">
+        {/* Cloud Database Status */}
+        <div className={`border rounded-lg p-3 mb-6 ${
+          error 
+            ? 'bg-red-50 border-red-200' 
+            : isOnline 
+              ? 'bg-green-50 border-green-200' 
+              : 'bg-orange-50 border-orange-200'
+        }`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
               <Save className="w-4 h-4" />
               <span className="text-sm">
-                IndexedDB • Last saved: {lastSaved.toLocaleString('en-US')}
+                {error ? (
+                  <span className="text-red-700">
+                    ❌ {error}
+                  </span>
+                ) : isOnline ? (
+                  <span className="text-green-700">
+                    ☁️ Neon DB {isSyncing ? '(Syncing...)' : '(Connected)'}
+                    {lastSaved && ` • Last saved: ${lastSaved.toLocaleString('en-US')}`}
+                  </span>
+                ) : (
+                  <span className="text-orange-700">
+                    🔌 Connecting to database...
+                  </span>
+                )}
               </span>
             </div>
-            <div className="text-xs text-purple-600">
+            <div className="text-xs">
               {players.length} players • {matches.length} matches
+            </div>
+          </div>
+          {error && (
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                onClick={refreshData}
+                disabled={isSyncing}
+                className="text-xs bg-blue-500 text-white py-1 px-2 rounded hover:bg-blue-600 transition-colors disabled:bg-gray-400"
+              >
+                {isSyncing ? 'Retrying...' : 'Retry Connection'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Database Error Alert */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-2">
+              <div className="text-red-600">⚠️</div>
+              <div>
+                <h3 className="font-semibold text-red-800">Database Connection Required</h3>
+                <p className="text-sm text-red-700 mt-1">
+                  This app requires an internet connection to save and load data from the cloud database.
+                  Please check your connection and try again.
+                </p>
+                <button
+                  onClick={refreshData}
+                  disabled={isSyncing}
+                  className="mt-2 bg-red-600 text-white py-1 px-3 rounded text-sm hover:bg-red-700 transition-colors disabled:bg-gray-400"
+                >
+                  {isSyncing ? 'Retrying...' : 'Retry Connection'}
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -355,12 +412,24 @@ const FoosballManager = () => {
             />
           )}
           {activeTab === 'new' && (
-            <NewMatchTab
-              players={players}
-              newMatch={newMatch}
-              setNewMatch={setNewMatch}
-              onAddMatch={addMatch}
-            />
+            <>
+              {error ? (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
+                  <div className="text-gray-400 mb-4">🔌</div>
+                  <h3 className="font-semibold text-gray-700 mb-2">Database Connection Required</h3>
+                  <p className="text-sm text-gray-600">
+                    Please establish a database connection to add new matches.
+                  </p>
+                </div>
+              ) : (
+                <NewMatchTab
+                  players={players}
+                  newMatch={newMatch}
+                  setNewMatch={setNewMatch}
+                  onAddMatch={addMatch}
+                />
+              )}
+            </>
           )}
           {activeTab === 'history' && (
             <HistoryTab
@@ -378,9 +447,13 @@ const FoosballManager = () => {
               players={players}
               matches={matches}
               lastSaved={lastSaved}
+              isOnline={isOnline}
+              isSyncing={isSyncing}
+              error={error}
               onExportData={exportDataToFile}
               onImportData={handleImportFile}
               onResetAll={handleResetAll}
+              onRefresh={refreshData}
             />
           )}
         </div>
