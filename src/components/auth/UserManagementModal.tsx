@@ -9,7 +9,7 @@ interface UserManagementModalProps {
 }
 
 const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose }) => {
-  const { inviteUser, makeAuthenticatedRequest } = useAuth();
+  const { inviteUser, makeAuthenticatedRequest, error: authError, clearError } = useAuth();
   const [users, setUsers] = useState<UserType[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,9 +23,10 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
   // Fetch users when modal opens
   useEffect(() => {
     if (isOpen) {
+      clearError(); // Clear any previous auth errors
       fetchUsers();
     }
-  }, [isOpen]);
+  }, [isOpen, clearError]);
 
   const fetchUsers = async () => {
     setIsLoading(true);
@@ -52,6 +53,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
   const handleInviteUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    clearError(); // Clear any previous auth errors
 
     if (!newUserEmail.trim()) {
       setError('Email address is required');
@@ -131,9 +133,9 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
         {/* Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
           {/* Error Message */}
-          {error && (
+          {(error || authError) && (
             <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
-              <div className="text-sm text-red-700">{error}</div>
+              <div className="text-sm text-red-700">{error || authError}</div>
             </div>
           )}
 

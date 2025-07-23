@@ -221,22 +221,56 @@ async function handleInviteUser(email: string, req: VercelRequest, res: VercelRe
     { expiresIn: '7d' }
   );
 
+  // Generate unique username
+  let baseUsername = email.split('@')[0];
+  let username = baseUsername;
+  let counter = 1;
+
+  // Check for existing usernames and generate unique one
+  while (true) {
+    const existingUsername = await sql`
+      SELECT id FROM users WHERE username = ${username} LIMIT 1;
+    `;
+    
+    if (existingUsername.length === 0) {
+      break; // Username is unique
+    }
+    
+    username = `${baseUsername}${counter}`;
+    counter++;
+  }
+
   // Create pending user
-  const newUsers = await sql`
-    INSERT INTO users (email, username, password_hash, role, status, created_by, invitation_token)
-    VALUES (${email}, ${email.split('@')[0]}, 'PENDING', 'user', 'pending', ${currentUser.userId}, ${invitationToken})
-    RETURNING id, email, username, role, status, created_at;
-  `;
+  try {
+    const newUsers = await sql`
+      INSERT INTO users (email, username, password_hash, role, status, created_by, invitation_token)
+      VALUES (${email}, ${username}, 'PENDING', 'user', 'pending', ${currentUser.userId}, ${invitationToken})
+      RETURNING id, email, username, role, status, created_at;
+    `;
 
-  const newUser = newUsers[0];
+    const newUser = newUsers[0];
 
-  return res.status(201).json({
-    success: true,
-    user: newUser,
-    invitationToken,
-    message: 'User invitation created successfully',
-    invitationUrl: `${req.headers.origin || ''}/complete-invitation?token=${invitationToken}`
-  });
+    return res.status(201).json({
+      success: true,
+      user: newUser,
+      invitationToken,
+      message: `User invitation created successfully with username: ${username}`,
+      invitationUrl: `${req.headers.origin || ''}/complete-invitation?token=${invitationToken}`
+    });
+  } catch (error: any) {
+    console.error('Error creating user invitation:', error);
+    
+    if (error.code === '23505') {
+      // Unique constraint violation
+      if (error.constraint?.includes('email')) {
+        return res.status(400).json({ error: 'User with this email already exists' });
+      } else if (error.constraint?.includes('username')) {
+        return res.status(400).json({ error: 'Username conflict occurred, please try again' });
+      }
+    }
+    
+    return res.status(500).json({ error: 'Failed to create user invitation' });
+  }
 }
 
 async function handleCompleteInvitation(token: string, username: string, password: string, res: VercelResponse) {
