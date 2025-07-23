@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { TrendingUp, Save } from 'lucide-react';
 
 // Import types
-import { Player, Match, NewMatch, AppData } from '../types/foosball';
+import { Match, NewMatch, AppData } from '../types/foosball';
 
 // Import hooks
 import { useNeonDB } from '../hooks/useNeonDB';
@@ -27,7 +27,7 @@ import AuthWrapper from '../components/auth/AuthWrapper';
 
 const FoosballManager = () => {
   // Use authentication context
-  const { user, permissions } = useAuth();
+  const { user, permissions, organization } = useAuth();
   
   // Use the simplified cloud-only data management
   const {
@@ -156,6 +156,11 @@ const FoosballManager = () => {
 
   // Add new match
   const addMatch = () => {
+    if (!organization) {
+      alert('Organization context not available!');
+      return;
+    }
+
     if (!validateMatch(
       newMatch.team1Player1,
       newMatch.team1Player2,
@@ -168,42 +173,46 @@ const FoosballManager = () => {
       return;
     }
 
-    const player1 = findOrCreatePlayer(newMatch.team1Player1, players, setPlayers);
-    const player2 = findOrCreatePlayer(newMatch.team1Player2, players, setPlayers);
-    const player3 = findOrCreatePlayer(newMatch.team2Player1, players, setPlayers);
-    const player4 = findOrCreatePlayer(newMatch.team2Player2, players, setPlayers);
+    const player1 = findOrCreatePlayer(newMatch.team1Player1, players, setPlayers, organization.id);
+    const player2 = findOrCreatePlayer(newMatch.team1Player2, players, setPlayers, organization.id);
+    const player3 = findOrCreatePlayer(newMatch.team2Player1, players, setPlayers, organization.id);
+    const player4 = findOrCreatePlayer(newMatch.team2Player2, players, setPlayers, organization.id);
 
-    if (!player1 || !player2 || !player3 || !player4) return;
+    // Determine winner
+    const team1Won = newMatch.team1Score > newMatch.team2Score;
 
-    // Calculate team average ELO
+    // Calculate ELO changes with margin factor
+    const marginFactor = calculateMarginFactor(
+      Math.abs(newMatch.team1Score - newMatch.team2Score)
+    );
+
     const team1Elo = (player1.elo + player2.elo) / 2;
     const team2Elo = (player3.elo + player4.elo) / 2;
 
-    // Determine winners and calculate victory factor based on score
-    const team1Won = newMatch.team1Score > newMatch.team2Score;
-    
-    // Margin factor (the bigger the victory, the more ELO changes)
-    const scoreDifference = Math.abs(newMatch.team1Score - newMatch.team2Score);
-    const marginFactor = calculateMarginFactor(scoreDifference);
-    
-    // Calculate result for ELO (1 for win, 0 for loss)
-    const team1Result = team1Won ? 1 : 0;
-    const team2Result = team1Won ? 0 : 1;
+    // Get K-factors based on experience
+    const player1K = getKFactor(player1.matches);
+    const player2K = getKFactor(player2.matches);
+    const player3K = getKFactor(player3.matches);
+    const player4K = getKFactor(player4.matches);
 
-    // Calculate new ELOs
-    const newElos: { [playerName: string]: number } = {
-      [player1.name]: calculateELO(player1.elo, team2Elo, team1Result, getKFactor(player1.matches, marginFactor)),
-      [player2.name]: calculateELO(player2.elo, team2Elo, team1Result, getKFactor(player2.matches, marginFactor)),
-      [player3.name]: calculateELO(player3.elo, team1Elo, team2Result, getKFactor(player3.matches, marginFactor)),
-      [player4.name]: calculateELO(player4.elo, team1Elo, team2Result, getKFactor(player4.matches, marginFactor))
-    };
+    // Calculate ELO changes for each player
+    const player1NewElo = calculateELO(player1.elo, team2Elo, team1Won ? 1 : 0, player1K * marginFactor);
+    const player2NewElo = calculateELO(player2.elo, team2Elo, team1Won ? 1 : 0, player2K * marginFactor);
+    const player3NewElo = calculateELO(player3.elo, team1Elo, team1Won ? 0 : 1, player3K * marginFactor);
+    const player4NewElo = calculateELO(player4.elo, team1Elo, team1Won ? 0 : 1, player4K * marginFactor);
 
-    // Update players
-    setPlayers((prev: Player[]) => prev.map((p: Player) => {
+    // Calculate changes
+    const player1Change = player1NewElo - player1.elo;
+    const player2Change = player2NewElo - player2.elo;
+    const player3Change = player3NewElo - player3.elo;
+    const player4Change = player4NewElo - player4.elo;
+
+    // Update player stats
+    setPlayers(prev => prev.map(p => {
       if (p.id === player1.id) {
         return {
           ...p,
-          elo: newElos[player1.name],
+          elo: player1NewElo,
           matches: p.matches + 1,
           wins: p.wins + (team1Won ? 1 : 0),
           losses: p.losses + (team1Won ? 0 : 1)
@@ -212,7 +221,7 @@ const FoosballManager = () => {
       if (p.id === player2.id) {
         return {
           ...p,
-          elo: newElos[player2.name],
+          elo: player2NewElo,
           matches: p.matches + 1,
           wins: p.wins + (team1Won ? 1 : 0),
           losses: p.losses + (team1Won ? 0 : 1)
@@ -221,7 +230,7 @@ const FoosballManager = () => {
       if (p.id === player3.id) {
         return {
           ...p,
-          elo: newElos[player3.name],
+          elo: player3NewElo,
           matches: p.matches + 1,
           wins: p.wins + (team1Won ? 0 : 1),
           losses: p.losses + (team1Won ? 1 : 0)
@@ -230,7 +239,7 @@ const FoosballManager = () => {
       if (p.id === player4.id) {
         return {
           ...p,
-          elo: newElos[player4.name],
+          elo: player4NewElo,
           matches: p.matches + 1,
           wins: p.wins + (team1Won ? 0 : 1),
           losses: p.losses + (team1Won ? 1 : 0)
@@ -239,7 +248,7 @@ const FoosballManager = () => {
       return p;
     }));
 
-    // Add match to history with creator tracking
+    // Add match to history with creator tracking and organization
     const match: Match = {
       id: Date.now(),
       date: new Date().toLocaleDateString('en-US'),
@@ -250,12 +259,13 @@ const FoosballManager = () => {
       team1Score: newMatch.team1Score,
       team2Score: newMatch.team2Score,
       eloChanges: {
-        [player1.name]: newElos[player1.name] - player1.elo,
-        [player2.name]: newElos[player2.name] - player2.elo,
-        [player3.name]: newElos[player3.name] - player3.elo,
-        [player4.name]: newElos[player4.name] - player4.elo
+        [player1.name]: player1Change,
+        [player2.name]: player2Change,
+        [player3.name]: player3Change,
+        [player4.name]: player4Change
       },
-      createdBy: user?.id
+      createdBy: user?.id,
+      organization_id: organization.id
     };
 
     setMatches(prev => [match, ...prev]);

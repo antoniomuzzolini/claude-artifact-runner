@@ -17,16 +17,15 @@ export const calculateMarginFactor = (scoreDifference: number) => {
   return Math.min(1 + (scoreDifference - 1) * 0.1, 2); // Max 2x multiplier
 };
 
-// Find or create player in the players array
+// Find or create player
 export const findOrCreatePlayer = (
-  name: string,
-  players: Player[],
-  setPlayers: React.Dispatch<React.SetStateAction<Player[]>>
-): Player | null => {
-  if (!name.trim()) return null;
-  
-  const existingPlayer = players.find((p: Player) => 
-    p.name.toLowerCase() === name.trim().toLowerCase()
+  name: string, 
+  players: Player[], 
+  setPlayers: React.Dispatch<React.SetStateAction<Player[]>>,
+  organizationId: number
+): Player => {
+  const existingPlayer = players.find(
+    p => p.name.toLowerCase() === name.toLowerCase()
   );
   
   if (existingPlayer) {
@@ -39,7 +38,8 @@ export const findOrCreatePlayer = (
     elo: 1200,
     matches: 0,
     wins: 0,
-    losses: 0
+    losses: 0,
+    organization_id: organizationId
   };
   
   setPlayers(prev => [...prev, newPlayer]);

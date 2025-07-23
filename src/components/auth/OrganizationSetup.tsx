@@ -42,7 +42,7 @@ const OrganizationSetup: React.FC<OrganizationSetupProps> = ({
       return;
     }
 
-    const success = await onOrganizationSetup({
+    await onOrganizationSetup({
       organizationName: organizationName.trim(),
       organizationDomain: organizationDomain.trim() || undefined,
       adminEmail: adminEmail.trim(),
