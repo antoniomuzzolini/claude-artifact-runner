@@ -34,7 +34,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ...match,
           team1Score: match.team1_score,
           team2Score: match.team2_score,
-          eloChanges: match.elo_changes
+          eloChanges: match.elo_changes,
+          createdBy: match.created_by
         }));
 
         res.status(200).json({
@@ -72,8 +73,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (Array.isArray(matchesData)) {
           for (const match of matchesData) {
             await sql`
-              INSERT INTO matches (id, date, time, team1, team2, winner, team1_score, team2_score, elo_changes)
-              VALUES (${match.id}, ${match.date}, ${match.time}, ${match.team1}, ${match.team2}, ${match.winner}, ${match.team1Score}, ${match.team2Score}, ${JSON.stringify(match.eloChanges)})
+              INSERT INTO matches (id, date, time, team1, team2, winner, team1_score, team2_score, elo_changes, created_by)
+              VALUES (${match.id}, ${match.date}, ${match.time}, ${match.team1}, ${match.team2}, ${match.winner}, ${match.team1Score}, ${match.team2Score}, ${JSON.stringify(match.eloChanges)}, ${match.createdBy || null})
               ON CONFLICT (id) DO UPDATE SET
                 date = EXCLUDED.date,
                 time = EXCLUDED.time,
@@ -82,7 +83,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 winner = EXCLUDED.winner,
                 team1_score = EXCLUDED.team1_score,
                 team2_score = EXCLUDED.team2_score,
-                elo_changes = EXCLUDED.elo_changes
+                elo_changes = EXCLUDED.elo_changes,
+                created_by = EXCLUDED.created_by
             `;
           }
         }

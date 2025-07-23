@@ -6,6 +6,7 @@ import { Player, Match, NewMatch, AppData } from '../types/foosball';
 
 // Import hooks
 import { useNeonDB } from '../hooks/useNeonDB';
+import { useAuth } from '../hooks/useAuth';
 
 // Import utilities
 import { 
@@ -21,8 +22,13 @@ import RankingsTab from '../components/tabs/RankingsTab';
 import NewMatchTab from '../components/tabs/NewMatchTab';
 import HistoryTab from '../components/tabs/HistoryTab';
 import StorageTab from '../components/tabs/StorageTab';
+import UserMenu from '../components/auth/UserMenu';
+import AuthWrapper from '../components/auth/AuthWrapper';
 
 const FoosballManager = () => {
+  // Use authentication context
+  const { user, permissions } = useAuth();
+  
   // Use the simplified cloud-only data management
   const {
     players,
@@ -233,7 +239,7 @@ const FoosballManager = () => {
       return p;
     }));
 
-    // Add match to history
+    // Add match to history with creator tracking
     const match: Match = {
       id: Date.now(),
       date: new Date().toLocaleDateString('en-US'),
@@ -248,7 +254,8 @@ const FoosballManager = () => {
         [player2.name]: newElos[player2.name] - player2.elo,
         [player3.name]: newElos[player3.name] - player3.elo,
         [player4.name]: newElos[player4.name] - player4.elo
-      }
+      },
+      createdBy: user?.id
     };
 
     setMatches(prev => [match, ...prev]);
@@ -284,54 +291,67 @@ const FoosballManager = () => {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto p-4">
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">🏆 Foosball Manager</h1>
-          <p className="text-gray-600">Manage your office's ELO rankings</p>
+        <div className="flex justify-between items-center mb-8">
+          <div className="text-center flex-1">
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">🏆 Foosball Manager</h1>
+            <p className="text-gray-600">Manage your office's ELO rankings</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <UserMenu />
+          </div>
         </div>
 
         {/* Navigation */}
         <div className="flex justify-center mb-8">
           <div className="bg-white rounded-lg p-1 shadow-sm border">
-            <button
-              onClick={() => setActiveTab('rankings')}
-              className={`px-6 py-2 rounded-md transition-colors ${
-                activeTab === 'rankings' 
-                  ? 'bg-blue-500 text-white' 
-                  : 'text-gray-600 hover:text-blue-500'
-              }`}
-            >
-              Rankings
-            </button>
-            <button
-              onClick={() => setActiveTab('new')}
-              className={`px-6 py-2 rounded-md transition-colors ${
-                activeTab === 'new' 
-                  ? 'bg-blue-500 text-white' 
-                  : 'text-gray-600 hover:text-blue-500'
-              }`}
-            >
-              New Match
-            </button>
-            <button
-              onClick={() => setActiveTab('history')}
-              className={`px-6 py-2 rounded-md transition-colors ${
-                activeTab === 'history' 
-                  ? 'bg-blue-500 text-white' 
-                  : 'text-gray-600 hover:text-blue-500'
-              }`}
-            >
-              History
-            </button>
-            <button
-              onClick={() => setActiveTab('storage')}
-              className={`px-6 py-2 rounded-md transition-colors ${
-                activeTab === 'storage' 
-                  ? 'bg-blue-500 text-white' 
-                  : 'text-gray-600 hover:text-blue-500'
-              }`}
-            >
-              Storage
-            </button>
+            {permissions.canViewRankings && (
+              <button
+                onClick={() => setActiveTab('rankings')}
+                className={`px-6 py-2 rounded-md transition-colors ${
+                  activeTab === 'rankings' 
+                    ? 'bg-blue-500 text-white' 
+                    : 'text-gray-600 hover:text-blue-500'
+                }`}
+              >
+                Rankings
+              </button>
+            )}
+            {permissions.canAddMatches && (
+              <button
+                onClick={() => setActiveTab('new')}
+                className={`px-6 py-2 rounded-md transition-colors ${
+                  activeTab === 'new' 
+                    ? 'bg-blue-500 text-white' 
+                    : 'text-gray-600 hover:text-blue-500'
+                }`}
+              >
+                New Match
+              </button>
+            )}
+            {permissions.canViewHistory && (
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`px-6 py-2 rounded-md transition-colors ${
+                  activeTab === 'history' 
+                    ? 'bg-blue-500 text-white' 
+                    : 'text-gray-600 hover:text-blue-500'
+                }`}
+              >
+                History
+              </button>
+            )}
+            {(permissions.canExportData || permissions.canResetData) && (
+              <button
+                onClick={() => setActiveTab('storage')}
+                className={`px-6 py-2 rounded-md transition-colors ${
+                  activeTab === 'storage' 
+                    ? 'bg-blue-500 text-white' 
+                    : 'text-gray-600 hover:text-blue-500'
+                }`}
+              >
+                Storage
+              </button>
+            )}
           </div>
         </div>
 
@@ -494,4 +514,11 @@ const FoosballManager = () => {
   );
 };
 
-export default FoosballManager;
+// Wrap the component with authentication
+const AuthenticatedFoosballManager = () => (
+  <AuthWrapper>
+    <FoosballManager />
+  </AuthWrapper>
+);
+
+export default AuthenticatedFoosballManager;

@@ -19,6 +19,7 @@ export interface Match {
   team1Score: number;
   team2Score: number;
   eloChanges: { [playerName: string]: number };
+  createdBy?: number; // User ID who created the match
 }
 
 export interface NewMatch {
