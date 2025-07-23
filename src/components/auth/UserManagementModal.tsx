@@ -19,6 +19,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
   // Invite user form state
   const [newUserEmail, setNewUserEmail] = useState('');
   const [isInviting, setIsInviting] = useState(false);
+  const [invitedUserEmail, setInvitedUserEmail] = useState<string | null>(null);
 
   // Fetch users when modal opens
   useEffect(() => {
@@ -26,7 +27,8 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
       clearError(); // Clear any previous auth errors
       fetchUsers();
     }
-  }, [isOpen, clearError]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]); // Remove clearError dependency to prevent infinite loop
 
   const fetchUsers = async () => {
     setIsLoading(true);
@@ -66,6 +68,9 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
       const result = await inviteUser(newUserEmail.trim());
       
       if (result.success) {
+        // Store invited email for later use
+        setInvitedUserEmail(newUserEmail.trim());
+        
         // Show invitation URL
         setInvitationUrl(result.invitationUrl || '');
         
@@ -213,25 +218,47 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
 
           {/* Invitation URL Display */}
           {invitationUrl && (
-            <div className="bg-green-50 rounded-lg p-4 mb-6 border border-green-200">
+            <div className="bg-blue-50 rounded-lg p-4 mb-6 border border-blue-200">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-medium text-green-900">Invitation Sent Successfully!</h3>
+                <h3 className="font-medium text-blue-900">Invitation Link Generated!</h3>
                 <button
                   onClick={() => {
                     setInvitationUrl(null);
+                    setInvitedUserEmail(null);
                     setShowInviteForm(false);
                   }}
-                  className="text-green-600 hover:text-green-800"
+                  className="text-blue-600 hover:text-blue-800"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <p className="text-sm text-green-700 mb-3">
+              <div className="bg-amber-50 border border-amber-200 rounded-md p-3 mb-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-amber-800">
+                    <strong>Note:</strong> No email was automatically sent. Please share this invitation link manually with the new user.
+                  </p>
+                  <button
+                    onClick={() => {
+                      // Opens the user's default email client with pre-filled invitation
+                      const subject = 'Invitation to join Foosball Championship';
+                      const body = `You've been invited to join our Foosball Championship app!\n\nClick this link to complete your registration:\n${invitationUrl}\n\nThis invitation expires in 7 days.`;
+                      const mailtoLink = `mailto:${invitedUserEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                      window.open(mailtoLink, '_blank');
+                    }}
+                    className="flex items-center gap-1 px-3 py-1 bg-amber-600 text-white text-xs rounded hover:bg-amber-700 transition-colors"
+                  >
+                    <Mail className="w-3 h-3" />
+                    Open Email
+                  </button>
+                </div>
+              </div>
+
+              <p className="text-sm text-blue-700 mb-3">
                 Share this invitation link with the new user. They'll use it to set up their username and password:
               </p>
 
-              <div className="flex items-center gap-2 bg-white border border-green-300 rounded-md p-2">
+              <div className="flex items-center gap-2 bg-white border border-blue-300 rounded-md p-2">
                 <input
                   type="text"
                   value={invitationUrl}
@@ -240,14 +267,14 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
                 />
                 <button
                   onClick={copyInvitationUrl}
-                  className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
+                  className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
                 >
                   <Copy className="w-3 h-3" />
                   Copy
                 </button>
               </div>
 
-              <p className="text-xs text-green-600 mt-2">
+              <p className="text-xs text-blue-600 mt-2">
                 💡 The invitation link expires in 7 days. The user will appear as "Pending" until they complete setup.
               </p>
             </div>
