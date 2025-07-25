@@ -37,12 +37,17 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
     try {
       const response = await makeAuthenticatedRequest('/api/users');
       
+      console.log('Users API Response Status:', response.status);
+      console.log('Users API Response Headers:', response.headers);
+      
       if (response.ok) {
         const data = await response.json();
+        console.log('Users API Data:', data);
         setUsers(data.users || []);
       } else {
         const errorData = await response.json();
-        setError(errorData.error || 'Failed to fetch users');
+        console.error('Users API Error:', errorData);
+        setError(errorData.error || `Failed to fetch users (Status: ${response.status})`);
       }
     } catch (error) {
       console.error('Error fetching users:', error);

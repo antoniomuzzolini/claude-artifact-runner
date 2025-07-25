@@ -20,7 +20,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     // Verify authentication
     const authHeader = req.headers.authorization;
+    console.log('Auth header:', authHeader ? 'Present' : 'Missing');
+    
     if (!authHeader?.startsWith('Bearer ')) {
+      console.log('No Bearer token found');
       return res.status(401).json({ error: 'Authentication required' });
     }
 
@@ -29,17 +32,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     try {
       currentUser = jwt.verify(token, JWT_SECRET) as any;
+      console.log('JWT verified for user:', currentUser.userId, 'role:', currentUser.role, 'orgId:', currentUser.organizationId);
     } catch (error) {
+      console.log('JWT verification failed:', error.message);
       return res.status(401).json({ error: 'Invalid token' });
     }
 
     // Verify superuser role
     if (currentUser.role !== 'superuser') {
+      console.log('User is not superuser:', currentUser.role);
       return res.status(403).json({ error: 'Only administrators can manage users' });
     }
 
     // Check if user has organization
     if (!currentUser.organizationId) {
+      console.log('User has no organization ID');
       return res.status(403).json({ error: 'User must belong to an organization' });
     }
 
@@ -59,7 +66,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'DELETE') {
-      const { userId } = req.query;
+      const { userId } = req.body;
 
       if (!userId) {
         return res.status(400).json({ error: 'User ID is required' });
