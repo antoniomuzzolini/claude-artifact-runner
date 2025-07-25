@@ -22,20 +22,6 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
 }) => {
   const { permissions } = useAuth();
 
-  const formatMatchResult = (match: Match) => {
-    const team1 = match.team1.join(' & ');
-    const team2 = match.team2.join(' & ');
-    return `${team1} vs ${team2}`;
-  };
-
-  const getWinnerDisplay = (match: Match) => {
-    if (match.winner === 'team1') {
-      return match.team1.join(' & ');
-    } else {
-      return match.team2.join(' & ');
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 mb-6">
@@ -89,57 +75,133 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
           {filteredMatches.map((match) => (
             <div
               key={match.id}
-              className="bg-white dark:bg-gray-800 rounded-lg p-4 border dark:border-gray-700 shadow-sm hover:shadow-md transition-all duration-200"
+              className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
             >
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-sm text-gray-500 dark:text-gray-400">
+              {/* Match Header */}
+              <div className="bg-gray-50 dark:bg-gray-700 px-4 py-3 border-b dark:border-gray-600">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                    <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">
                       {match.date} at {match.time}
                     </span>
                   </div>
-                  
-                  <div className="mb-3">
-                    <div className="font-medium text-gray-900 dark:text-white mb-1">
-                      {formatMatchResult(match)}
+                  <div className="text-lg font-bold text-gray-900 dark:text-white">
+                    {match.team1Score} - {match.team2Score}
+                  </div>
+                </div>
+              </div>
+
+              {/* Teams Display */}
+              <div className="p-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                  {/* Team 1 */}
+                  <div className={`text-center p-3 rounded-lg border-2 transition-all duration-200 ${
+                    match.winner === 'team1' 
+                      ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-600' 
+                      : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'
+                  }`}>
+                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+                      Team 1 {match.winner === 'team1' && '👑'}
                     </div>
-                    <div className="flex items-center gap-4 text-sm">
-                      <span className="text-gray-600 dark:text-gray-300">
-                        Score: {match.team1Score} - {match.team2Score}
-                      </span>
-                      <span className="text-green-600 dark:text-green-400 font-medium">
-                        Winner: {getWinnerDisplay(match)}
-                      </span>
+                    <div className="space-y-1">
+                      {match.team1.map((player, index) => (
+                        <div
+                          key={index}
+                          className={`text-sm font-medium ${
+                            matchFilterPlayer === player 
+                              ? 'text-blue-600 dark:text-blue-400 font-bold' 
+                              : 'text-gray-900 dark:text-white'
+                          }`}
+                        >
+                          {player}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="text-lg font-bold text-gray-900 dark:text-white mt-2">
+                      {match.team1Score}
                     </div>
                   </div>
 
-                  {/* ELO Changes */}
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
-                    <span className="font-medium">ELO changes: </span>
-                    {Object.entries(match.eloChanges).map(([playerName, change], index) => (
-                      <span key={playerName}>
-                        {index > 0 && ', '}
-                        <span className={`font-medium ${
-                          matchFilterPlayer === playerName ? 'text-blue-600 dark:text-blue-400' : ''
-                        }`}>
-                          {playerName}: {change > 0 ? '+' : ''}{change}
-                        </span>
-                      </span>
-                    ))}
+                  {/* VS Separator */}
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-gray-400 dark:text-gray-500">VS</div>
+                  </div>
+
+                  {/* Team 2 */}
+                  <div className={`text-center p-3 rounded-lg border-2 transition-all duration-200 ${
+                    match.winner === 'team2' 
+                      ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-600' 
+                      : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'
+                  }`}>
+                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+                      Team 2 {match.winner === 'team2' && '👑'}
+                    </div>
+                    <div className="space-y-1">
+                      {match.team2.map((player, index) => (
+                        <div
+                          key={index}
+                          className={`text-sm font-medium ${
+                            matchFilterPlayer === player 
+                              ? 'text-blue-600 dark:text-blue-400 font-bold' 
+                              : 'text-gray-900 dark:text-white'
+                          }`}
+                        >
+                          {player}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="text-lg font-bold text-gray-900 dark:text-white mt-2">
+                      {match.team2Score}
+                    </div>
                   </div>
                 </div>
 
-                {/* Delete Button */}
-                {permissions.canDeleteOwnMatches && (
+                {/* ELO Changes */}
+                <div className="mt-4 pt-3 border-t dark:border-gray-600">
+                  <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                    ELO Changes
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {Object.entries(match.eloChanges).map(([playerName, change]) => (
+                      <div
+                        key={playerName}
+                        className={`text-center p-2 rounded border ${
+                          matchFilterPlayer === playerName 
+                            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-600' 
+                            : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'
+                        }`}
+                      >
+                        <div className={`text-xs font-medium ${
+                          matchFilterPlayer === playerName 
+                            ? 'text-blue-600 dark:text-blue-400' 
+                            : 'text-gray-700 dark:text-gray-300'
+                        }`}>
+                          {playerName}
+                        </div>
+                        <div className={`text-sm font-bold ${
+                          change > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                        }`}>
+                          {change > 0 ? '+' : ''}{change}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Delete Button */}
+              {permissions.canDeleteOwnMatches && (
+                <div className="px-4 pb-4">
                   <button
                     onClick={() => onDeleteMatch(match)}
-                    className="ml-4 p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
-                    title="Delete match"
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md border border-red-200 dark:border-red-800 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                   >
                     <Trash2 className="w-4 h-4" />
+                    Delete Match
                   </button>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

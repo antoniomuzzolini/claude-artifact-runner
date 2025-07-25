@@ -6,6 +6,7 @@ import { Match, NewMatch, AppData } from '../types/foosball';
 // Import hooks
 import { useNeonDB } from '../hooks/useNeonDB';
 import { useAuth } from '../hooks/useAuth';
+import { useTheme } from '../hooks/useTheme';
 
 // Import utilities
 import { 
@@ -25,6 +26,9 @@ import UserMenu from '../components/auth/UserMenu';
 import AuthWrapper from '../components/auth/AuthWrapper';
 
 const ChampionshipManager = () => {
+  // Initialize theme early
+  useTheme();
+  
   // Use authentication context
   const { user, organization } = useAuth();
   
