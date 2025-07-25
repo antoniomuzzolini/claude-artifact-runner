@@ -22,7 +22,6 @@ export const useAuth = () => {
 
       if (storedToken && storedUser) {
         try {
-          console.log('Initializing auth with stored token');
           setToken(storedToken);
           setUser(JSON.parse(storedUser));
           
@@ -40,7 +39,6 @@ export const useAuth = () => {
           });
 
           if (response.ok) {
-            console.log('Token verification successful');
             const data = await response.json();
             setUser(data.user);
             if (data.organization) {
@@ -48,7 +46,6 @@ export const useAuth = () => {
             }
             // Keep the token that was already set
           } else {
-            console.log('Token verification failed, clearing auth');
             // Token is invalid, clear everything
             localStorage.removeItem('championship_token');
             localStorage.removeItem('championship_user');
@@ -282,15 +279,10 @@ export const useAuth = () => {
 
   // Helper to make authenticated API calls
   const makeAuthenticatedRequest = useCallback(async (url: string, options: RequestInit = {}) => {
-    console.log('makeAuthenticatedRequest called with token:', token ? 'Present' : 'Missing');
-    console.log('Token value:', token);
-    console.log('localStorage token:', localStorage.getItem('championship_token'));
-    
     if (!token) {
       // Try to get token from localStorage as fallback
       const fallbackToken = localStorage.getItem('championship_token');
       if (fallbackToken) {
-        console.log('Using fallback token from localStorage');
         setToken(fallbackToken);
         
         const headers = {

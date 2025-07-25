@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { LogOut, Users, User, ChevronDown, RefreshCw } from 'lucide-react';
+import { LogOut, Users, User, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import UserManagementModal from './UserManagementModal';
 import ThemeToggle from '../ui/theme-toggle';
 
 const UserMenu: React.FC = () => {
-  const { user, organization, logout, permissions, refreshUser } = useAuth();
+  const { user, organization, logout, permissions } = useAuth();
   const [showUserModal, setShowUserModal] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
@@ -39,10 +39,6 @@ const UserMenu: React.FC = () => {
               {organization && (
                 <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{organization.name}</div>
               )}
-              {/* Debug info */}
-              <div className="text-xs text-red-600 dark:text-red-400 mt-1">
-                Debug: ID={user.id}, OrgID={user.organization_id}
-              </div>
             </div>
 
             <div className="p-2">
@@ -65,20 +61,6 @@ const UserMenu: React.FC = () => {
                   Manage Users
                 </button>
               )}
-
-              {/* Debug: Refresh Token */}
-              <button
-                onClick={async () => {
-                  console.log('Current token:', localStorage.getItem('championship_token'));
-                  console.log('Current user:', JSON.parse(localStorage.getItem('championship_user') || '{}'));
-                  await refreshUser();
-                  setDropdownOpen(false);
-                }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-orange-700 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-md transition-colors duration-200"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Debug: Refresh Token
-              </button>
 
               {/* Logout */}
               <button
