@@ -92,7 +92,14 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
       winRate: stats.wins + stats.losses > 0 ? (stats.wins / (stats.wins + stats.losses)) * 100 : 0
     }))
     .filter(stats => stats.total > 0)
-    .sort((a, b) => b.winRate - a.winRate);
+    .sort((a, b) => {
+      // Primary sort: win rate (descending)
+      if (b.winRate !== a.winRate) {
+        return b.winRate - a.winRate;
+      }
+      // Tiebreaker: total games played (descending)
+      return b.total - a.total;
+    });
 
   const sortedOpponents: OpponentStats[] = Array.from(opponentStats.entries())
     .map(([name, stats]) => ({
@@ -103,7 +110,14 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
       winRateAgainst: stats.winsAgainst + stats.lossesAgainst > 0 ? (stats.winsAgainst / (stats.winsAgainst + stats.lossesAgainst)) * 100 : 0
     }))
     .filter(stats => stats.total > 0)
-    .sort((a, b) => b.winRateAgainst - a.winRateAgainst);
+    .sort((a, b) => {
+      // Primary sort: win rate against (descending)
+      if (b.winRateAgainst !== a.winRateAgainst) {
+        return b.winRateAgainst - a.winRateAgainst;
+      }
+      // Tiebreaker: total games played (descending)
+      return b.total - a.total;
+    });
 
   // Calculate overall win rate
   const winRate = player.matches > 0 ? (player.wins / player.matches * 100).toFixed(1) : '0.0';
