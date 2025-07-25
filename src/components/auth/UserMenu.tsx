@@ -1,105 +1,99 @@
 import React, { useState } from 'react';
-import { User, LogOut, Settings, UserPlus, ChevronDown } from 'lucide-react';
+import { LogOut, Users, User, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import UserManagementModal from './UserManagementModal';
+import ThemeToggle from '../ui/theme-toggle';
 
 const UserMenu: React.FC = () => {
-  const { user, logout, permissions } = useAuth();
-  const [isOpen, setIsOpen] = useState(false);
-  const [showUserManagement, setShowUserManagement] = useState(false);
+  const { user, organization, logout, permissions } = useAuth();
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   if (!user) return null;
 
   return (
-    <div className="relative">
-      {/* User Menu Button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-      >
-        <User className="w-4 h-4" />
-        <span className="hidden sm:inline">{user.username}</span>
-        <span className="text-xs text-gray-500 hidden sm:inline">
-          ({user.role})
-        </span>
-        <ChevronDown className="w-4 h-4" />
-      </button>
+    <>
+      <div className="relative">
+        {/* User Info Button */}
+        <button
+          onClick={() => setDropdownOpen(!dropdownOpen)}
+          className="flex items-center gap-3 p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+        >
+          <div className="w-8 h-8 bg-blue-600 dark:bg-blue-500 rounded-full flex items-center justify-center">
+            <User className="w-4 h-4 text-white" />
+          </div>
+          <div className="text-left hidden sm:block">
+            <div className="text-sm font-medium text-gray-900 dark:text-white">{user.username}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">{organization?.name}</div>
+          </div>
+          <ChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+        </button>
 
-      {/* Dropdown Menu */}
-      {isOpen && (
-        <>
-          {/* Overlay */}
-          <div 
-            className="fixed inset-0 z-10" 
-            onClick={() => setIsOpen(false)}
-          />
-          
-          {/* Menu */}
-          <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-md shadow-lg z-20">
-            <div className="py-2">
-              {/* User Info */}
-              <div className="px-4 py-2 border-b border-gray-100">
-                <p className="font-medium text-gray-900">{user.username}</p>
-                <p className="text-sm text-gray-500">{user.email}</p>
-                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mt-1 ${
-                  user.role === 'superuser' 
-                    ? 'bg-purple-100 text-purple-800' 
-                    : 'bg-blue-100 text-blue-800'
-                }`}>
-                  {user.role === 'superuser' ? 'Administrator' : 'User'}
-                </span>
+        {/* Dropdown Menu */}
+        {dropdownOpen && (
+          <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50">
+            <div className="p-3 border-b border-gray-200 dark:border-gray-700">
+              <div className="text-sm font-medium text-gray-900 dark:text-white">{user.username}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">{user.email}</div>
+              <div className="text-xs text-blue-600 dark:text-blue-400 capitalize">{user.role}</div>
+              {organization && (
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{organization.name}</div>
+              )}
+            </div>
+
+            <div className="p-2">
+              {/* Theme Toggle */}
+              <div className="flex items-center justify-between px-3 py-2">
+                <span className="text-sm text-gray-700 dark:text-gray-300">Dark Mode</span>
+                <ThemeToggle />
               </div>
 
-              {/* Menu Items */}
-              <div className="py-1">
-                {permissions.canManageUsers && (
-                  <button
-                    onClick={() => {
-                      setIsOpen(false);
-                      setShowUserManagement(true);
-                    }}
-                    className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                  >
-                    <UserPlus className="w-4 h-4" />
-                    Manage Users
-                  </button>
-                )}
-
+              {/* User Management */}
+              {permissions.canManageUsers && (
                 <button
                   onClick={() => {
-                    setIsOpen(false);
-                    // TODO: Open user settings modal
+                    setShowUserModal(true);
+                    setDropdownOpen(false);
                   }}
-                  className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors duration-200"
                 >
-                  <Settings className="w-4 h-4" />
-                  Settings
+                  <Users className="w-4 h-4" />
+                  Manage Users
                 </button>
+              )}
 
-                <div className="border-t border-gray-100 my-1" />
-
-                <button
-                  onClick={() => {
-                    setIsOpen(false);
-                    logout();
-                  }}
-                  className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Sign out
-                </button>
-              </div>
+              {/* Logout */}
+              <button
+                onClick={() => {
+                  logout();
+                  setDropdownOpen(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors duration-200"
+              >
+                <LogOut className="w-4 h-4" />
+                Sign out
+              </button>
             </div>
           </div>
-        </>
-      )}
+        )}
+
+        {/* Click outside to close dropdown */}
+        {dropdownOpen && (
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setDropdownOpen(false)}
+          />
+        )}
+      </div>
 
       {/* User Management Modal */}
-      <UserManagementModal 
-        isOpen={showUserManagement}
-        onClose={() => setShowUserManagement(false)}
-      />
-    </div>
+      {showUserModal && (
+        <UserManagementModal
+          isOpen={showUserModal}
+          onClose={() => setShowUserModal(false)}
+        />
+      )}
+    </>
   );
 };
 

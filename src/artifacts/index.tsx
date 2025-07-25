@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { TrendingUp, Save } from 'lucide-react';
 
 // Import types
 import { Match, NewMatch, AppData } from '../types/foosball';
@@ -27,7 +26,7 @@ import AuthWrapper from '../components/auth/AuthWrapper';
 
 const ChampionshipManager = () => {
   // Use authentication context
-  const { user, permissions, organization } = useAuth();
+  const { user, organization } = useAuth();
   
   // Use the simplified cloud-only data management
   const {
@@ -87,71 +86,6 @@ const ChampionshipManager = () => {
     
     // Reset input
     event.target.value = '';
-  };
-
-  // Handle reset with confirmation
-  const handleResetAll = async () => {
-    if (confirm('Are you sure you want to delete all data? This operation is irreversible!')) {
-      try {
-        await resetAll();
-        alert('All data has been deleted!');
-      } catch (error) {
-        console.error('Error deleting data:', error);
-        alert('Error deleting data!');
-      }
-    }
-  };
-
-  // Delete match and revert ELO changes
-  const deleteMatch = (matchToDelete: Match) => {
-    const matchInfo = `${matchToDelete.team1.join(' & ')} vs ${matchToDelete.team2.join(' & ')} (${matchToDelete.team1Score}-${matchToDelete.team2Score})`;
-    if (!confirm(`Are you sure you want to delete this match?\n\n${matchInfo}\n\nELO and statistics will be restored for all involved players.`)) {
-      return;
-    }
-
-    try {
-      // Find all players involved in the match
-      const playersInMatch = [
-        ...matchToDelete.team1,
-        ...matchToDelete.team2
-      ];
-
-      // Update players by reverting changes
-      setPlayers(prevPlayers => 
-        prevPlayers.map(player => {
-          if (playersInMatch.includes(player.name)) {
-            // Revert ELO change
-            const eloChange = matchToDelete.eloChanges[player.name] || 0;
-            const newElo = player.elo - eloChange;
-            
-            // Determine if player was on winning team
-            const wasInTeam1 = matchToDelete.team1.includes(player.name);
-            const wasInTeam2 = matchToDelete.team2.includes(player.name);
-            const teamWon = (wasInTeam1 && matchToDelete.winner === 'team1') ||
-                           (wasInTeam2 && matchToDelete.winner === 'team2');
-            
-            return {
-              ...player,
-              elo: newElo,
-              matches: Math.max(0, player.matches - 1),
-              wins: teamWon ? Math.max(0, player.wins - 1) : player.wins,
-              losses: !teamWon ? Math.max(0, player.losses - 1) : player.losses
-            };
-          }
-          return player;
-        })
-      );
-
-      // Remove match from list
-      setMatches(prevMatches => 
-        prevMatches.filter(match => match.id !== matchToDelete.id)
-      );
-
-      alert('Match deleted and ELO restored!');
-    } catch (error) {
-      console.error('Error deleting match:', error);
-      alert('Error deleting match!');
-    }
   };
 
   // Add new match
@@ -283,12 +217,6 @@ const ChampionshipManager = () => {
     alert('Match added successfully!');
   };
 
-  // Navigate to player history
-  const goToPlayerHistory = (playerName: string) => {
-    setMatchFilterPlayer(playerName);
-    setActiveTab('history');
-  };
-
   // Filter matches by player
   const filteredMatches = matchFilterPlayer 
     ? matches.filter(match => 
@@ -303,222 +231,131 @@ const ChampionshipManager = () => {
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div className="text-center flex-1">
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">🏆 Championship Manager</h1>
-            <p className="text-gray-600">Manage your ELO rankings and competitions</p>
+            <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-2">🏆 Championship Manager</h1>
+            <p className="text-gray-600 dark:text-gray-300">Manage your ELO rankings and competitions</p>
           </div>
           <div className="flex items-center gap-4">
             <UserMenu />
           </div>
         </div>
 
-        {/* Navigation */}
+        {/* Tabs Navigation */}
         <div className="flex justify-center mb-8">
-          <div className="bg-white rounded-lg p-1 shadow-sm border">
-            {permissions.canViewRankings && (
+          <nav className="flex space-x-8" aria-label="Tabs">
+            {[
+              { id: 'rankings', name: 'Rankings', icon: '🏆' },
+              { id: 'new-match', name: 'New Match', icon: '➕' },
+              { id: 'history', name: 'History', icon: '📊' },
+              { id: 'storage', name: 'Backup', icon: '💾' },
+            ].map((tab) => (
               <button
-                onClick={() => setActiveTab('rankings')}
-                className={`px-6 py-2 rounded-md transition-colors ${
-                  activeTab === 'rankings' 
-                    ? 'bg-blue-500 text-white' 
-                    : 'text-gray-600 hover:text-blue-500'
-                }`}
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`${
+                  activeTab === tab.id
+                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+                } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200`}
               >
-                Rankings
+                <span className="mr-2">{tab.icon}</span>
+                {tab.name}
               </button>
-            )}
-            {permissions.canAddMatches && (
-              <button
-                onClick={() => setActiveTab('new')}
-                className={`px-6 py-2 rounded-md transition-colors ${
-                  activeTab === 'new' 
-                    ? 'bg-blue-500 text-white' 
-                    : 'text-gray-600 hover:text-blue-500'
-                }`}
-              >
-                New Match
-              </button>
-            )}
-            {permissions.canViewHistory && (
-              <button
-                onClick={() => setActiveTab('history')}
-                className={`px-6 py-2 rounded-md transition-colors ${
-                  activeTab === 'history' 
-                    ? 'bg-blue-500 text-white' 
-                    : 'text-gray-600 hover:text-blue-500'
-                }`}
-              >
-                History
-              </button>
-            )}
-            {(permissions.canExportData || permissions.canResetData) && (
-              <button
-                onClick={() => setActiveTab('storage')}
-                className={`px-6 py-2 rounded-md transition-colors ${
-                  activeTab === 'storage' 
-                    ? 'bg-blue-500 text-white' 
-                    : 'text-gray-600 hover:text-blue-500'
-                }`}
-              >
-                Storage
-              </button>
-            )}
-          </div>
+            ))}
+          </nav>
         </div>
 
-        {/* Cloud Database Status */}
-        <div className={`border rounded-lg p-3 mb-6 ${
-          error 
-            ? 'bg-red-50 border-red-200' 
-            : isOnline 
-              ? 'bg-green-50 border-green-200' 
-              : 'bg-orange-50 border-orange-200'
-        }`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Save className="w-4 h-4" />
-              <span className="text-sm">
-                {error ? (
-                  <span className="text-red-700">
-                    ❌ {error}
-                  </span>
-                ) : isOnline ? (
-                  <span className="text-green-700">
-                    ☁️ Neon DB {isSyncing ? '(Syncing...)' : '(Connected)'}
-                    {lastSaved && ` • Last saved: ${lastSaved.toLocaleString('en-US')}`}
-                  </span>
-                ) : (
-                  <span className="text-orange-700">
-                    🔌 Connecting to database...
-                  </span>
-                )}
-              </span>
-            </div>
-            <div className="text-xs">
-              {players.length} players • {matches.length} matches
-            </div>
-          </div>
-          {error && (
-            <div className="mt-2 flex items-center gap-2">
-              <button
-                onClick={refreshData}
-                disabled={isSyncing}
-                className="text-xs bg-blue-500 text-white py-1 px-2 rounded hover:bg-blue-600 transition-colors disabled:bg-gray-400"
-              >
-                {isSyncing ? 'Retrying...' : 'Retry Connection'}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Database Error Alert */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-            <div className="flex items-center gap-2">
-              <div className="text-red-600">⚠️</div>
-              <div>
-                <h3 className="font-semibold text-red-800">Database Connection Required</h3>
-                <p className="text-sm text-red-700 mt-1">
-                  This app requires an internet connection to save and load data from the cloud database.
-                  Please check your connection and try again.
-                </p>
-                <button
-                  onClick={refreshData}
-                  disabled={isSyncing}
-                  className="mt-2 bg-red-600 text-white py-1 px-3 rounded text-sm hover:bg-red-700 transition-colors disabled:bg-gray-400"
-                >
-                  {isSyncing ? 'Retrying...' : 'Retry Connection'}
-                </button>
+        {/* Tab Content */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 transition-colors duration-200">
+          {/* Cloud Database Status */}
+          <div className={`border rounded-lg p-3 mb-6 ${
+            error 
+              ? 'bg-red-50 dark:bg-red-900/50 border-red-200 dark:border-red-800' 
+              : isOnline 
+                ? 'bg-green-50 dark:bg-green-900/50 border-green-200 dark:border-green-800' 
+                : 'bg-orange-50 dark:bg-orange-900/50 border-orange-200 dark:border-orange-800'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${
+                  error ? 'bg-red-500' : isOnline ? 'bg-green-500' : 'bg-orange-500'
+                }`} />
+                <span className={`text-sm font-medium ${
+                  error 
+                    ? 'text-red-700 dark:text-red-400' 
+                    : isOnline 
+                      ? 'text-green-700 dark:text-green-400' 
+                      : 'text-orange-700 dark:text-orange-400'
+                }`}>
+                  {error ? 'Error' : isOnline ? 'Online' : 'Connecting...'}
+                </span>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Content */}
-        <div className="mb-8">
-          {activeTab === 'rankings' && (
-            <RankingsTab 
-              players={players} 
-              onPlayerClick={goToPlayerHistory} 
-            />
-          )}
-          {activeTab === 'new' && (
-            <>
-              {error ? (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
-                  <div className="text-gray-400 mb-4">🔌</div>
-                  <h3 className="font-semibold text-gray-700 mb-2">Database Connection Required</h3>
-                  <p className="text-sm text-gray-600">
-                    Please establish a database connection to add new matches.
-                  </p>
-                </div>
-              ) : (
-                <NewMatchTab
-                  players={players}
-                  newMatch={newMatch}
-                  setNewMatch={setNewMatch}
-                  onAddMatch={addMatch}
-                />
+              {isSyncing && (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
               )}
-            </>
-          )}
-          {activeTab === 'history' && (
-            <HistoryTab
-              players={players}
-              matches={matches}
-              matchFilterPlayer={matchFilterPlayer}
-              setMatchFilterPlayer={setMatchFilterPlayer}
-              filteredMatches={filteredMatches}
-              onDeleteMatch={deleteMatch}
-              onBackToRankings={() => setActiveTab('rankings')}
-            />
-          )}
-          {activeTab === 'storage' && (
-            <StorageTab
-              players={players}
-              matches={matches}
-              lastSaved={lastSaved}
-              isOnline={isOnline}
-              isSyncing={isSyncing}
-              error={error}
-              onExportData={exportDataToFile}
-              onImportData={handleImportFile}
-              onResetAll={handleResetAll}
-              onRefresh={refreshData}
-            />
-          )}
-        </div>
-
-        {/* Stats */}
-        {players.length > 0 && (
-          <div className="bg-white rounded-lg p-6 shadow-sm border">
-            <h3 className="font-semibold mb-4 flex items-center gap-2">
-              <TrendingUp className="w-5 h-5" />
-              General Statistics
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
-              <div>
-                <div className="text-2xl font-bold text-blue-600">{players.length}</div>
-                <div className="text-sm text-gray-500">Players</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-green-600">{matches.length}</div>
-                <div className="text-sm text-gray-500">Matches</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-purple-600">
-                  {Math.max(...players.map(p => p.elo), 0)}
-                </div>
-                <div className="text-sm text-gray-500">Max ELO</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-orange-600">
-                  {players.length > 0 ? Math.round(players.reduce((sum, p) => sum + p.elo, 0) / players.length) : 0}
-                </div>
-                <div className="text-sm text-gray-500">Average ELO</div>
-              </div>
+            </div>
+            <div className={`text-xs mt-1 ${
+              error 
+                ? 'text-red-600 dark:text-red-400' 
+                : isOnline 
+                  ? 'text-green-600 dark:text-green-400' 
+                  : 'text-orange-600 dark:text-orange-400'
+            }`}>
+              {error || (isOnline ? 'Data automatically synced to cloud' : 'Establishing connection...')}
             </div>
           </div>
-        )}
+
+          {/* Tab Content */}
+          <div className="p-6">
+            {activeTab === 'rankings' && (
+              <RankingsTab 
+                players={players} 
+              />
+            )}
+            {activeTab === 'new-match' && (
+              <>
+                {error ? (
+                  <div className="text-center py-8">
+                    <div className="text-red-600 dark:text-red-400 mb-4">
+                      ⚠️ Cannot add matches - database error
+                    </div>
+                    <p className="text-gray-600 dark:text-gray-400">{error}</p>
+                  </div>
+                ) : (
+                  <NewMatchTab
+                    players={players}
+                    newMatch={newMatch}
+                    setNewMatch={setNewMatch}
+                    onAddMatch={addMatch}
+                  />
+                )}
+              </>
+            )}
+            {activeTab === 'history' && (
+              <HistoryTab
+                filteredMatches={filteredMatches}
+                players={players}
+                matchFilterPlayer={matchFilterPlayer}
+                setMatchFilterPlayer={setMatchFilterPlayer}
+                onDeleteMatch={() => {}} // Placeholder for now
+                onBackToRankings={() => setActiveTab('rankings')}
+              />
+            )}
+            {activeTab === 'storage' && (
+              <StorageTab
+                players={players}
+                matches={matches}
+                lastSaved={lastSaved}
+                isOnline={isOnline}
+                isSyncing={isSyncing}
+                error={error}
+                onExportData={exportDataToFile}
+                onImportData={handleImportFile}
+                onResetAll={resetAll}
+                onRefresh={refreshData}
+              />
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
