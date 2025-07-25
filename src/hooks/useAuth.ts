@@ -22,6 +22,14 @@ export const useAuth = () => {
 
       if (storedToken && storedUser) {
         try {
+          console.log('Initializing auth with stored token');
+          setToken(storedToken);
+          setUser(JSON.parse(storedUser));
+          
+          if (storedOrganization) {
+            setOrganization(JSON.parse(storedOrganization));
+          }
+          
           // Verify token is still valid
           const response = await fetch(`${API_BASE}/api/auth`, {
             method: 'GET',
@@ -32,28 +40,26 @@ export const useAuth = () => {
           });
 
           if (response.ok) {
-            const data: AuthResponse = await response.json();
-            if (data.success && data.user) {
-              setToken(storedToken);
-              setUser(data.user);
-              setOrganization(data.organization || (storedOrganization ? JSON.parse(storedOrganization) : null));
-            } else {
-              // Token invalid, clear storage
-              localStorage.removeItem('championship_token');
-              localStorage.removeItem('championship_user');
-              localStorage.removeItem('championship_organization');
+            console.log('Token verification successful');
+            const data = await response.json();
+            setUser(data.user);
+            if (data.organization) {
+              setOrganization(data.organization);
             }
+            // Keep the token that was already set
           } else {
-            // Token invalid, clear storage
+            console.log('Token verification failed, clearing auth');
+            // Token is invalid, clear everything
             localStorage.removeItem('championship_token');
             localStorage.removeItem('championship_user');
             localStorage.removeItem('championship_organization');
+            setToken(null);
+            setUser(null);
+            setOrganization(null);
           }
         } catch (error) {
           console.error('Auth initialization error:', error);
-          localStorage.removeItem('championship_token');
-          localStorage.removeItem('championship_user');
-          localStorage.removeItem('championship_organization');
+          // Keep existing auth data on network error
         }
       }
 
@@ -276,7 +282,29 @@ export const useAuth = () => {
 
   // Helper to make authenticated API calls
   const makeAuthenticatedRequest = useCallback(async (url: string, options: RequestInit = {}) => {
+    console.log('makeAuthenticatedRequest called with token:', token ? 'Present' : 'Missing');
+    console.log('Token value:', token);
+    console.log('localStorage token:', localStorage.getItem('championship_token'));
+    
     if (!token) {
+      // Try to get token from localStorage as fallback
+      const fallbackToken = localStorage.getItem('championship_token');
+      if (fallbackToken) {
+        console.log('Using fallback token from localStorage');
+        setToken(fallbackToken);
+        
+        const headers = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${fallbackToken}`,
+          ...options.headers,
+        };
+
+        return fetch(`${API_BASE}${url}`, {
+          ...options,
+          headers,
+        });
+      }
+      
       throw new Error('No authentication token');
     }
 
