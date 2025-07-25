@@ -13,6 +13,8 @@ interface StorageTabProps {
   onImportData: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onResetAll: () => void;
   onRefresh: () => Promise<void>;
+  onRecalculateELO?: () => void;
+  isSuperuser?: boolean;
 }
 
 const StorageTab: React.FC<StorageTabProps> = ({
@@ -25,7 +27,9 @@ const StorageTab: React.FC<StorageTabProps> = ({
   onExportData,
   onImportData,
   onResetAll,
-  onRefresh
+  onRefresh,
+  onRecalculateELO,
+  isSuperuser
 }) => {
   return (
     <div className="space-y-6">
@@ -155,6 +159,65 @@ const StorageTab: React.FC<StorageTabProps> = ({
           </div>
         </div>
       </div>
+
+      {/* ELO Recalculation - Superuser Only */}
+      {isSuperuser && onRecalculateELO && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border dark:border-gray-700 shadow-sm">
+          <h3 className="text-lg font-semibold mb-4 text-orange-600 dark:text-orange-400">ELO Recalculation</h3>
+          
+          <div className="space-y-4">
+            <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="text-orange-600 dark:text-orange-400 text-lg">⚠️</div>
+                <div>
+                  <p className="text-sm font-medium text-orange-800 dark:text-orange-300 mb-1">
+                    Recalculate ELO from scratch
+                  </p>
+                  <p className="text-xs text-orange-700 dark:text-orange-400">
+                    This will reset all players to 1200 ELO and recalculate ratings based on match history in chronological order. All current ELO values will be overwritten.
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="space-y-3">
+              <div className="text-sm text-gray-600 dark:text-gray-300">
+                <strong>What this does:</strong>
+                <ul className="list-disc list-inside mt-1 space-y-1 text-xs">
+                  <li>Reset all players to starting ELO (1200)</li>
+                  <li>Process all matches in chronological order</li>
+                  <li>Recalculate ELO changes for each match</li>
+                  <li>Update all player rankings and match history</li>
+                </ul>
+              </div>
+              
+              <button
+                onClick={() => {
+                  if (window.confirm('Are you sure you want to recalculate all ELO ratings? This will reset all current ELO values and recalculate from match history.')) {
+                    onRecalculateELO();
+                  }
+                }}
+                disabled={isSyncing || !isOnline || matches.length === 0}
+                className="flex items-center gap-2 py-2 px-4 bg-orange-600 dark:bg-orange-500 text-white rounded-md hover:bg-orange-700 dark:hover:bg-orange-600 transition-colors duration-200 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Recalculate ELO Ratings
+              </button>
+              
+              {matches.length === 0 && (
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  No matches available for ELO recalculation
+                </p>
+              )}
+              {!isOnline && (
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Database connection required to recalculate ELO
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Danger Zone */}
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border dark:border-gray-700 shadow-sm">

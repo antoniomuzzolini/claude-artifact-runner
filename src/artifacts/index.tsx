@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 // Import types
-import { Match, NewMatch, AppData } from '../types/foosball';
+import { Match, NewMatch, AppData, Player } from '../types/foosball';
 
 // Import hooks
 import { useNeonDB } from '../hooks/useNeonDB';
@@ -116,9 +116,11 @@ const ChampionshipManager = () => {
     const player3 = findOrCreatePlayer(newMatch.team2Player1, players, setPlayers, organization.id);
     const player4 = findOrCreatePlayer(newMatch.team2Player2, players, setPlayers, organization.id);
 
-    // Determine winner
+    // Get total points for the match
+    let totalPoints = newMatch.team1Score + newMatch.team2Score;
+    if (totalPoints === 0) totalPoints = 1;
     const team1Won = newMatch.team1Score > newMatch.team2Score;
-
+    
     // Calculate ELO changes with margin factor
     const marginFactor = calculateMarginFactor(
       Math.abs(newMatch.team1Score - newMatch.team2Score)
@@ -134,10 +136,10 @@ const ChampionshipManager = () => {
     const player4K = getKFactor(player4.matches);
 
     // Calculate ELO changes for each player
-    const player1NewElo = calculateELO(player1.elo, team2Elo, team1Won ? 1 : 0, player1K * marginFactor);
-    const player2NewElo = calculateELO(player2.elo, team2Elo, team1Won ? 1 : 0, player2K * marginFactor);
-    const player3NewElo = calculateELO(player3.elo, team1Elo, team1Won ? 0 : 1, player3K * marginFactor);
-    const player4NewElo = calculateELO(player4.elo, team1Elo, team1Won ? 0 : 1, player4K * marginFactor);
+    const player1NewElo = calculateELO(player1.elo, team2Elo, newMatch.team1Score / totalPoints, player1K * marginFactor);
+    const player2NewElo = calculateELO(player2.elo, team2Elo, newMatch.team1Score / totalPoints, player2K * marginFactor);
+    const player3NewElo = calculateELO(player3.elo, team1Elo, newMatch.team2Score / totalPoints, player3K * marginFactor);
+    const player4NewElo = calculateELO(player4.elo, team1Elo, newMatch.team2Score / totalPoints, player4K * marginFactor);
 
     // Calculate changes
     const player1Change = player1NewElo - player1.elo;
@@ -233,6 +235,116 @@ const ChampionshipManager = () => {
   const handlePlayerClick = (playerName: string) => {
     setMatchFilterPlayer(playerName);
     setActiveTab('history');
+  };
+
+  // Recalculate ELO from scratch (superuser only)
+  const recalculateELO = async () => {
+    if (!organization) return;
+
+    try {
+      // Create a copy of all players and reset their ELO to 1200
+      const resetPlayers = players.map(player => ({
+        ...player,
+        elo: 1200,
+        matches: 0,
+        wins: 0,
+        losses: 0
+      }));
+
+      // Sort matches by date and time chronologically
+      const sortedMatches = [...matches].sort((a, b) => {
+        const dateA = new Date(`${a.date} ${a.time}`);
+        const dateB = new Date(`${b.date} ${b.time}`);
+        return dateA.getTime() - dateB.getTime();
+      });
+
+      // Process each match and recalculate ELO
+      const updatedMatches = [];
+      let currentPlayers = [...resetPlayers];
+
+      for (const match of sortedMatches) {
+        // Find all players involved in this match
+        const player1 = currentPlayers.find(p => p.name === match.team1[0]);
+        const player2 = currentPlayers.find(p => p.name === match.team1[1]);
+        const player3 = currentPlayers.find(p => p.name === match.team2[0]);
+        const player4 = currentPlayers.find(p => p.name === match.team2[1]);
+
+        // Skip if any player is missing
+        if (!player1 || !player2 || !player3 || !player4) continue;
+
+        // Calculate team averages
+        const team1Elo = (player1.elo + player2.elo) / 2;
+        const team2Elo = (player3.elo + player4.elo) / 2;
+
+        // Get total points for the match
+        let totalPoints = match.team1Score + match.team2Score;
+        if (totalPoints === 0) totalPoints = 1;
+        const team1Won = match.team1Score > match.team2Score;
+
+        // Calculate margin factor
+        const scoreDifference = Math.abs(match.team1Score - match.team2Score);
+        const marginFactor = calculateMarginFactor(scoreDifference);
+
+        // Get K-factors
+        const player1K = getKFactor(player1.matches, marginFactor);
+        const player2K = getKFactor(player2.matches, marginFactor);
+        const player3K = getKFactor(player3.matches, marginFactor);
+        const player4K = getKFactor(player4.matches, marginFactor);
+
+        // Calculate new ELO ratings using the user's updated calculation method
+        const player1NewElo = calculateELO(player1.elo, team2Elo, match.team1Score / totalPoints, player1K);
+        const player2NewElo = calculateELO(player2.elo, team2Elo, match.team1Score / totalPoints, player2K);
+        const player3NewElo = calculateELO(player3.elo, team1Elo, match.team2Score / totalPoints, player3K);
+        const player4NewElo = calculateELO(player4.elo, team1Elo, match.team2Score / totalPoints, player4K);
+
+        // Calculate ELO changes
+        const player1Change = player1NewElo - player1.elo;
+        const player2Change = player2NewElo - player2.elo;
+        const player3Change = player3NewElo - player3.elo;
+        const player4Change = player4NewElo - player4.elo;
+
+        // Update player stats
+        const updatePlayerStats = (player: Player, newElo: number, won: boolean) => {
+          const playerIndex = currentPlayers.findIndex(p => p.id === player.id);
+          if (playerIndex !== -1) {
+            currentPlayers[playerIndex] = {
+              ...currentPlayers[playerIndex],
+              elo: newElo,
+              matches: currentPlayers[playerIndex].matches + 1,
+              wins: currentPlayers[playerIndex].wins + (won ? 1 : 0),
+              losses: currentPlayers[playerIndex].losses + (won ? 0 : 1)
+            };
+          }
+        };
+
+        updatePlayerStats(player1, player1NewElo, team1Won);
+        updatePlayerStats(player2, player2NewElo, team1Won);
+        updatePlayerStats(player3, player3NewElo, !team1Won);
+        updatePlayerStats(player4, player4NewElo, !team1Won);
+
+        // Create updated match with new ELO changes
+        const updatedMatch = {
+          ...match,
+          eloChanges: {
+            [player1.name]: player1Change,
+            [player2.name]: player2Change,
+            [player3.name]: player3Change,
+            [player4.name]: player4Change
+          }
+        };
+
+        updatedMatches.push(updatedMatch);
+      }
+
+      // Update state with recalculated data
+      setPlayers(currentPlayers);
+      setMatches(updatedMatches);
+
+      alert(`ELO recalculation complete! Processed ${updatedMatches.length} matches.`);
+    } catch (error) {
+      console.error('ELO recalculation error:', error);
+      alert('Failed to recalculate ELO. Please try again.');
+    }
   };
 
   return (
@@ -361,6 +473,8 @@ const ChampionshipManager = () => {
                 onImportData={handleImportFile}
                 onResetAll={resetAll}
                 onRefresh={refreshData}
+                onRecalculateELO={recalculateELO}
+                isSuperuser={user?.role === 'superuser'}
               />
             )}
           </div>
