@@ -3,41 +3,60 @@ import { useState, useEffect, useCallback } from 'react';
 type Theme = 'light' | 'dark';
 
 export const useTheme = () => {
-  const [theme, setTheme] = useState<Theme>('light');
-
-  // Initialize theme from localStorage or system preference
-  useEffect(() => {
+  // Initialize with system preference or saved theme
+  const getInitialTheme = (): Theme => {
+    // First check localStorage
     const savedTheme = localStorage.getItem('championship_theme') as Theme;
-    if (savedTheme) {
-      setTheme(savedTheme);
-      document.documentElement.classList.toggle('dark', savedTheme === 'dark');
+    if (savedTheme === 'light' || savedTheme === 'dark') {
+      return savedTheme;
+    }
+    
+    // Then check system preference
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
+    }
+    
+    return 'light';
+  };
+
+  const [theme, setTheme] = useState<Theme>(getInitialTheme);
+
+  // Apply theme to document
+  const applyTheme = useCallback((newTheme: Theme) => {
+    if (newTheme === 'dark') {
+      document.documentElement.classList.add('dark');
     } else {
-      // Check system preference
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const systemTheme = prefersDark ? 'dark' : 'light';
-      setTheme(systemTheme);
-      document.documentElement.classList.toggle('dark', systemTheme === 'dark');
+      document.documentElement.classList.remove('dark');
     }
   }, []);
+
+  // Initialize theme on mount
+  useEffect(() => {
+    applyTheme(theme);
+    // Save initial theme if not already saved
+    if (!localStorage.getItem('championship_theme')) {
+      localStorage.setItem('championship_theme', theme);
+    }
+  }, [theme, applyTheme]);
 
   const toggleTheme = useCallback(() => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
     setTheme(newTheme);
     localStorage.setItem('championship_theme', newTheme);
-    document.documentElement.classList.toggle('dark', newTheme === 'dark');
-  }, [theme]);
+    applyTheme(newTheme);
+  }, [theme, applyTheme]);
 
   const setLightMode = useCallback(() => {
     setTheme('light');
     localStorage.setItem('championship_theme', 'light');
-    document.documentElement.classList.remove('dark');
-  }, []);
+    applyTheme('light');
+  }, [applyTheme]);
 
   const setDarkMode = useCallback(() => {
     setTheme('dark');
     localStorage.setItem('championship_theme', 'dark');
-    document.documentElement.classList.add('dark');
-  }, []);
+    applyTheme('dark');
+  }, [applyTheme]);
 
   return {
     theme,

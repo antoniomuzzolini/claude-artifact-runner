@@ -4,9 +4,10 @@ import { Player } from '../../types/foosball';
 
 interface RankingsTabProps {
   players: Player[];
+  onPlayerClick?: (playerName: string) => void;
 }
 
-const RankingsTab: React.FC<RankingsTabProps> = ({ players }) => {
+const RankingsTab: React.FC<RankingsTabProps> = ({ players, onPlayerClick }) => {
   // Sort players by ELO rating (highest first)
   const sortedPlayers = [...players].sort((a, b) => b.elo - a.elo);
 
@@ -60,7 +61,10 @@ const RankingsTab: React.FC<RankingsTabProps> = ({ players }) => {
             return (
               <div
                 key={player.id}
-                className={`${getRankColor(rank)} rounded-lg p-4 border transition-all duration-200 hover:shadow-md`}
+                onClick={() => onPlayerClick?.(player.name)}
+                className={`p-6 rounded-lg border-2 transition-all duration-200 ${getRankColor(rank)} ${
+                  onPlayerClick ? 'cursor-pointer hover:shadow-lg hover:scale-[1.02] hover:border-blue-300 dark:hover:border-blue-600' : ''
+                }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
