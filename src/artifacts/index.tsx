@@ -24,6 +24,7 @@ import HistoryTab from '../components/tabs/HistoryTab';
 import StorageTab from '../components/tabs/StorageTab';
 import UserMenu from '../components/auth/UserMenu';
 import AuthWrapper from '../components/auth/AuthWrapper';
+import PlayerStatsModal from '../components/PlayerStatsModal';
 
 const ChampionshipManager = () => {
   // Initialize theme early
@@ -57,8 +58,12 @@ const ChampionshipManager = () => {
     team1Score: 0,
     team2Score: 0
   });
-  const [activeTab, setActiveTab] = useState('rankings');
+  const [activeTab, setActiveTab] = useState<'rankings' | 'new-match' | 'history' | 'storage'>('rankings');
   const [matchFilterPlayer, setMatchFilterPlayer] = useState<string>('');
+  
+  // Player stats modal state
+  const [selectedPlayerForStats, setSelectedPlayerForStats] = useState<Player | null>(null);
+  const [isPlayerStatsModalOpen, setIsPlayerStatsModalOpen] = useState(false);
 
   // Handle file import
   const handleImportFile = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -237,6 +242,21 @@ const ChampionshipManager = () => {
     setActiveTab('history');
   };
 
+  // Handle opening player stats modal
+  const handlePlayerStatsClick = (playerName: string) => {
+    const player = players.find(p => p.name === playerName);
+    if (player) {
+      setSelectedPlayerForStats(player);
+      setIsPlayerStatsModalOpen(true);
+    }
+  };
+
+  // Close player stats modal
+  const closePlayerStatsModal = () => {
+    setIsPlayerStatsModalOpen(false);
+    setSelectedPlayerForStats(null);
+  };
+
   // Recalculate ELO from scratch (superuser only)
   const recalculateELO = async () => {
     if (!organization) return;
@@ -370,7 +390,7 @@ const ChampionshipManager = () => {
             ].map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => setActiveTab(tab.id as 'rankings' | 'new-match' | 'history' | 'storage')}
                 className={`${
                   activeTab === tab.id
                     ? 'border-blue-500 text-blue-600 dark:text-blue-400'
@@ -430,6 +450,7 @@ const ChampionshipManager = () => {
               <RankingsTab 
                 players={players} 
                 onPlayerClick={handlePlayerClick}
+                onPlayerStatsClick={handlePlayerStatsClick}
               />
             )}
             {activeTab === 'new-match' && (
@@ -459,6 +480,7 @@ const ChampionshipManager = () => {
                 setMatchFilterPlayer={setMatchFilterPlayer}
                 onDeleteMatch={() => {}} // Placeholder for now
                 onBackToRankings={() => setActiveTab('rankings')}
+                onPlayerStatsClick={handlePlayerStatsClick}
               />
             )}
             {activeTab === 'storage' && (
@@ -479,6 +501,14 @@ const ChampionshipManager = () => {
             )}
           </div>
         </div>
+        
+        {/* Player Stats Modal */}
+        <PlayerStatsModal
+          player={selectedPlayerForStats}
+          matches={matches}
+          isOpen={isPlayerStatsModalOpen}
+          onClose={closePlayerStatsModal}
+        />
       </div>
     </div>
   );

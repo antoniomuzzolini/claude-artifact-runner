@@ -10,6 +10,7 @@ interface HistoryTabProps {
   filteredMatches: Match[];
   onDeleteMatch: (match: Match) => void;
   onBackToRankings: () => void;
+  onPlayerStatsClick?: (playerName: string) => void;
 }
 
 const HistoryTab: React.FC<HistoryTabProps> = ({
@@ -18,7 +19,8 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
   setMatchFilterPlayer,
   filteredMatches,
   onDeleteMatch,
-  onBackToRankings
+  onBackToRankings,
+  onPlayerStatsClick
 }) => {
   const { permissions } = useAuth();
 
@@ -108,10 +110,16 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                       {match.team1.map((player, index) => (
                         <div
                           key={index}
-                          className={`text-sm font-medium ${
+                          onClick={(e) => {
+                            if (onPlayerStatsClick) {
+                              e.stopPropagation();
+                              onPlayerStatsClick(player);
+                            }
+                          }}
+                          className={`text-sm font-medium cursor-pointer hover:underline transition-colors duration-200 ${
                             matchFilterPlayer === player 
                               ? 'text-blue-600 dark:text-blue-400 font-bold' 
-                              : 'text-gray-900 dark:text-white'
+                              : 'text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400'
                           }`}
                         >
                           {player}
@@ -141,10 +149,16 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                       {match.team2.map((player, index) => (
                         <div
                           key={index}
-                          className={`text-sm font-medium ${
+                          onClick={(e) => {
+                            if (onPlayerStatsClick) {
+                              e.stopPropagation();
+                              onPlayerStatsClick(player);
+                            }
+                          }}
+                          className={`text-sm font-medium cursor-pointer hover:underline transition-colors duration-200 ${
                             matchFilterPlayer === player 
                               ? 'text-blue-600 dark:text-blue-400 font-bold' 
-                              : 'text-gray-900 dark:text-white'
+                              : 'text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400'
                           }`}
                         >
                           {player}
@@ -166,13 +180,19 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                     {Object.entries(match.eloChanges).map(([playerName, change]) => (
                       <div
                         key={playerName}
-                        className={`text-center p-2 rounded border ${
+                        onClick={(e) => {
+                          if (onPlayerStatsClick) {
+                            e.stopPropagation();
+                            onPlayerStatsClick(playerName);
+                          }
+                        }}
+                        className={`text-center p-2 rounded border cursor-pointer hover:shadow-md transition-all duration-200 ${
                           matchFilterPlayer === playerName 
                             ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-600' 
-                            : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'
+                            : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600'
                         }`}
                       >
-                        <div className={`text-xs font-medium ${
+                        <div className={`text-xs font-medium hover:underline ${
                           matchFilterPlayer === playerName 
                             ? 'text-blue-600 dark:text-blue-400' 
                             : 'text-gray-700 dark:text-gray-300'

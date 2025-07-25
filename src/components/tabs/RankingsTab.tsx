@@ -5,9 +5,10 @@ import { Player } from '../../types/foosball';
 interface RankingsTabProps {
   players: Player[];
   onPlayerClick?: (playerName: string) => void;
+  onPlayerStatsClick?: (playerName: string) => void;
 }
 
-const RankingsTab: React.FC<RankingsTabProps> = ({ players, onPlayerClick }) => {
+const RankingsTab: React.FC<RankingsTabProps> = ({ players, onPlayerClick, onPlayerStatsClick }) => {
   // Sort players by ELO rating (highest first)
   const sortedPlayers = [...players].sort((a, b) => b.elo - a.elo);
 
@@ -61,10 +62,7 @@ const RankingsTab: React.FC<RankingsTabProps> = ({ players, onPlayerClick }) => 
             return (
               <div
                 key={player.id}
-                onClick={() => onPlayerClick?.(player.name)}
-                className={`p-6 rounded-lg border-2 transition-all duration-200 ${getRankColor(rank)} ${
-                  onPlayerClick ? 'cursor-pointer hover:shadow-lg hover:scale-[1.02] hover:border-blue-300 dark:hover:border-blue-600' : ''
-                }`}
+                className={`p-6 rounded-lg border-2 transition-all duration-200 ${getRankColor(rank)}`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
@@ -81,29 +79,53 @@ const RankingsTab: React.FC<RankingsTabProps> = ({ players, onPlayerClick }) => 
                   
                   <div className="text-right">
                     <div className="text-2xl font-bold text-gray-900 dark:text-white">{player.elo}</div>
-                    <div className="text-sm text-gray-600 dark:text-gray-300">ELO Rating</div>
+                    <div className="text-sm text-gray-500 dark:text-gray-400">ELO Rating</div>
                   </div>
                 </div>
                 
-                <div className="mt-3 flex justify-between items-center text-sm">
-                  <div className="flex gap-6">
-                    <span className="text-green-600 dark:text-green-400">
-                      <strong>{player.wins}</strong> wins
-                    </span>
-                    <span className="text-red-600 dark:text-red-400">
-                      <strong>{player.losses}</strong> losses
-                    </span>
-                    <span className="text-blue-600 dark:text-blue-400">
-                      <strong>{winRate}%</strong> win rate
-                    </span>
+                {/* Player Stats */}
+                <div className="mt-4 grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <div className="text-lg font-bold text-green-600 dark:text-green-400">{player.wins}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">Wins</div>
                   </div>
-                  
-                  {rank <= 3 && (
-                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                      {rank === 1 ? 'Champion' : rank === 2 ? 'Runner-up' : 'Third Place'}
-                    </div>
-                  )}
+                  <div>
+                    <div className="text-lg font-bold text-red-600 dark:text-red-400">{player.losses}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">Losses</div>
+                  </div>
+                  <div>
+                    <div className="text-lg font-bold text-blue-600 dark:text-blue-400">{winRate}%</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">Win Rate</div>
+                  </div>
                 </div>
+
+                {/* Action Buttons */}
+                {(onPlayerClick || onPlayerStatsClick) && (
+                  <div className="mt-4 pt-3 border-t dark:border-gray-600 flex gap-2">
+                    {onPlayerStatsClick && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onPlayerStatsClick(player.name);
+                        }}
+                        className="flex-1 px-3 py-2 bg-blue-600 dark:bg-blue-500 text-white text-sm rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors duration-200 font-medium"
+                      >
+                        View Stats
+                      </button>
+                    )}
+                    {onPlayerClick && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onPlayerClick(player.name);
+                        }}
+                        className="flex-1 px-3 py-2 bg-gray-600 dark:bg-gray-500 text-white text-sm rounded-md hover:bg-gray-700 dark:hover:bg-gray-600 transition-colors duration-200 font-medium"
+                      >
+                        Match History
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
