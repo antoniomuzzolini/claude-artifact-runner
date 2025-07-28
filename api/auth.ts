@@ -38,6 +38,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         case 'complete-invitation':
           return await handleCompleteInvitation(req.body.token, username, password, res);
         
+        case 'verify-invitation':
+          return await handleVerifyInvitation(req.body.token, res);
+        
         default:
           return res.status(400).json({ error: 'Invalid action' });
       }
@@ -344,6 +347,58 @@ async function handleCompleteInvitation(token: string, username: string, passwor
     return res.status(200).json({
       success: true,
       message: 'Account setup completed successfully'
+    });
+
+  } catch (error) {
+    return res.status(400).json({ error: 'Invalid or expired invitation token' });
+  }
+}
+
+async function handleVerifyInvitation(token: string, res: VercelResponse) {
+  if (!token) {
+    return res.status(400).json({ error: 'Token is required' });
+  }
+
+  try {
+    // Verify invitation token
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    
+    if (decoded.type !== 'invitation') {
+      return res.status(400).json({ error: 'Invalid invitation token' });
+    }
+
+    // Find user by email and check status
+    const users = await sql`
+      SELECT id, email, status, invitation_token
+      FROM users 
+      WHERE email = ${decoded.email} AND organization_id = ${decoded.organizationId}
+      LIMIT 1;
+    `;
+
+    if (users.length === 0) {
+      return res.status(400).json({ error: 'Invitation not found' });
+    }
+
+    const user = users[0];
+
+    // Check if invitation is still pending
+    if (user.status !== 'pending') {
+      return res.status(400).json({ 
+        error: 'This invitation is no longer valid. The user has already completed registration.',
+        userAlreadyRegistered: true
+      });
+    }
+
+    // Verify the invitation token matches
+    if (user.invitation_token !== token) {
+      return res.status(400).json({ error: 'Invalid invitation token' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      email: user.email,
+      isPending: true,
+      message: 'Invitation is valid'
     });
 
   } catch (error) {

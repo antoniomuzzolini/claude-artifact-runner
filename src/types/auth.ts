@@ -45,6 +45,9 @@ export interface AuthResponse {
   message?: string;
   invitationUrl?: string;
   organization?: Organization;
+  email?: string;
+  isPending?: boolean;
+  userAlreadyRegistered?: boolean;
 }
 
 export interface AuthContext {

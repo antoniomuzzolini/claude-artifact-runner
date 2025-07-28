@@ -8,7 +8,7 @@ interface CompleteInvitationProps {
 }
 
 const CompleteInvitation: React.FC<CompleteInvitationProps> = ({ token, onComplete }) => {
-  const { completeInvitation } = useAuth();
+  const { verifyInvitation, completeInvitation } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -17,22 +17,30 @@ const CompleteInvitation: React.FC<CompleteInvitationProps> = ({ token, onComple
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [tokenValid, setTokenValid] = useState<boolean | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userAlreadyRegistered, setUserAlreadyRegistered] = useState(false);
 
   // Verify token validity on mount
   useEffect(() => {
     const verifyToken = async () => {
       try {
-        // Try to decode token to get email (for display)
-        const tokenPayload = JSON.parse(atob(token.split('.')[1]));
-        if (tokenPayload.type === 'invitation' && tokenPayload.email) {
+        const result = await verifyInvitation(token);
+        
+        if (result.email && result.isPending) {
           setTokenValid(true);
+          setUserEmail(result.email);
+          setUserAlreadyRegistered(false);
+        } else if (result.userAlreadyRegistered) {
+          setTokenValid(false);
+          setUserAlreadyRegistered(true);
+          setError('This invitation is no longer valid. The user has already completed registration.');
         } else {
           setTokenValid(false);
           setError('Invalid invitation token');
         }
       } catch (error) {
         setTokenValid(false);
-        setError('Invalid invitation token format');
+        setError('Failed to verify invitation token');
       }
     };
 
@@ -42,7 +50,7 @@ const CompleteInvitation: React.FC<CompleteInvitationProps> = ({ token, onComple
       setTokenValid(false);
       setError('No invitation token provided');
     }
-  }, [token]);
+  }, [token, verifyInvitation]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,9 +111,14 @@ const CompleteInvitation: React.FC<CompleteInvitationProps> = ({ token, onComple
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="max-w-md w-full p-8 text-center">
           <AlertCircle className="mx-auto h-12 w-12 text-red-600 mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Invalid Invitation</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            {userAlreadyRegistered ? 'User Already Registered' : 'Invalid Invitation'}
+          </h2>
           <p className="text-gray-600 mb-4">
-            This invitation link is invalid or has expired. Please contact your administrator for a new invitation.
+            {userAlreadyRegistered 
+              ? 'This invitation is no longer valid because the user has already completed their registration. Please use the login page to access your account.'
+              : 'This invitation link is invalid or has expired. Please contact your administrator for a new invitation.'
+            }
           </p>
           <button
             onClick={() => window.location.href = '/'}
@@ -145,6 +158,13 @@ const CompleteInvitation: React.FC<CompleteInvitationProps> = ({ token, onComple
           <p className="mt-2 text-sm text-gray-600">
             You've been invited to join the Championship Manager
           </p>
+          {userEmail && (
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+              <p className="text-sm text-blue-700">
+                <span className="font-medium">Email:</span> {userEmail}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Form */}

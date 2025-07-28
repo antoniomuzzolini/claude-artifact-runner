@@ -235,6 +235,34 @@ export const useAuth = () => {
     }
   }, [token]);
 
+  const verifyInvitation = useCallback(async (token: string): Promise<{ email?: string; isPending?: boolean; userAlreadyRegistered?: boolean }> => {
+    try {
+      const response = await fetch(`${API_BASE}/api/auth`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'verify-invitation',
+          token,
+        }),
+      });
+
+      const data: AuthResponse = await response.json();
+
+      if (data.success) {
+        return { email: data.email, isPending: data.isPending };
+      } else {
+        setError(data.error || 'Failed to verify invitation');
+        return { userAlreadyRegistered: data.userAlreadyRegistered };
+      }
+    } catch (error) {
+      console.error('Verify invitation error:', error);
+      setError('Network error during invitation verification');
+      return {};
+    }
+  }, []);
+
   const completeInvitation = useCallback(async (token: string, username: string, password: string): Promise<boolean> => {
     try {
       const response = await fetch(`${API_BASE}/api/auth`, {
@@ -327,6 +355,7 @@ export const useAuth = () => {
     logout,
     refreshUser,
     inviteUser,
+    verifyInvitation,
     completeInvitation,
     makeAuthenticatedRequest,
     clearError: () => setError(null),
