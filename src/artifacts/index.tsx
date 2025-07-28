@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 // Import types
 import { Match, NewMatch, AppData, Player } from '../types/foosball';
@@ -271,6 +271,11 @@ const ChampionshipManager = () => {
     }
   };
 
+  // Update document title with organization name
+  useEffect(() => {
+    document.title = organization?.name || 'Championship Manager';
+  }, [organization?.name]);
+
   // Recalculate ELO from scratch (superuser only)
   const recalculateELO = async () => {
     if (!organization) return;
@@ -387,7 +392,9 @@ const ChampionshipManager = () => {
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Championship Manager</h1>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              {organization?.name || 'Championship Manager'}
+            </h1>
             <p className="text-gray-600 dark:text-gray-400 mt-1">Manage your championship tracking</p>
           </div>
           <UserMenu />
@@ -493,7 +500,6 @@ const ChampionshipManager = () => {
                 matchFilterPlayer={matchFilterPlayer}
                 setMatchFilterPlayer={setMatchFilterPlayer}
                 onDeleteMatch={handleDeleteMatch}
-                onBackToRankings={() => setActiveTab('rankings')}
                 onPlayerStatsClick={handlePlayerStatsClick}
               />
             )}

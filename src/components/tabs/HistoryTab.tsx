@@ -9,7 +9,6 @@ interface HistoryTabProps {
   setMatchFilterPlayer: React.Dispatch<React.SetStateAction<string>>;
   filteredMatches: Match[];
   onDeleteMatch: (match: Match) => void;
-  onBackToRankings: () => void;
   onPlayerStatsClick?: (playerName: string) => void;
 }
 
@@ -19,7 +18,6 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
   setMatchFilterPlayer,
   filteredMatches,
   onDeleteMatch,
-  onBackToRankings,
   onPlayerStatsClick
 }) => {
   const { permissions, user } = useAuth();
@@ -49,10 +47,10 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
         
         {matchFilterPlayer && (
           <button
-            onClick={onBackToRankings}
-            className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline transition-colors duration-200"
+            onClick={() => setMatchFilterPlayer('')}
+            className="px-3 py-1 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-md border border-gray-300 dark:border-gray-500 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
           >
-            View {matchFilterPlayer} in rankings
+            Remove filter
           </button>
         )}
       </div>
