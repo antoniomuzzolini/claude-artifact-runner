@@ -22,7 +22,7 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
   onBackToRankings,
   onPlayerStatsClick
 }) => {
-  const { permissions } = useAuth();
+  const { permissions, user } = useAuth();
 
   return (
     <div className="space-y-6">
@@ -211,7 +211,7 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
               </div>
 
               {/* Delete Button */}
-              {permissions.canDeleteOwnMatches && (
+              {(permissions.canDeleteAnyMatch || (permissions.canDeleteOwnMatches && match.createdBy === user?.id)) && (
                 <div className="px-4 pb-4">
                   <button
                     onClick={() => onDeleteMatch(match)}

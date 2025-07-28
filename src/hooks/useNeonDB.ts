@@ -212,6 +212,46 @@ export const useNeonDB = () => {
     await loadData();
   };
 
+  // Delete a specific match
+  const deleteMatch = async (matchId: number) => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return false;
+    }
+
+    if (!isOnline) {
+      setError('Cannot delete - database not available');
+      return false;
+    }
+
+    setIsSyncing(true);
+    setError(null);
+    
+    try {
+      const response = await makeAuthenticatedRequest('/api/matches', {
+        method: 'DELETE',
+        body: JSON.stringify({ matchId }),
+      });
+      
+      if (response.ok) {
+        // Remove match from local state
+        setMatches(prev => prev.filter(match => match.id !== matchId));
+        console.log('✅ Match deleted successfully');
+        return true;
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to delete match');
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Error deleting match:', error);
+      setError('Error deleting match');
+      return false;
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   // Check connection status periodically
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -271,6 +311,7 @@ export const useNeonDB = () => {
     importDataFromFile,
     resetAll,
     refreshData,
-    saveData // Expose for manual save
+    saveData, // Expose for manual save
+    deleteMatch
   };
 }; 

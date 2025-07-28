@@ -46,7 +46,8 @@ const ChampionshipManager = () => {
     exportDataToFile,
     importDataFromFile,
     resetAll,
-    refreshData
+    refreshData,
+    deleteMatch
   } = useNeonDB();
 
   // Local state for UI
@@ -257,6 +258,19 @@ const ChampionshipManager = () => {
     setSelectedPlayerForStats(null);
   };
 
+  // Handle match deletion
+  const handleDeleteMatch = async (match: Match) => {
+    const confirmMessage = `Are you sure you want to delete this match?\n\nDate: ${match.date} ${match.time}\nTeams: ${match.team1.join(', ')} vs ${match.team2.join(', ')}\nScore: ${match.team1Score} - ${match.team2Score}`;
+    
+    if (window.confirm(confirmMessage)) {
+      const success = await deleteMatch(match.id);
+      if (success) {
+        // Optionally recalculate ELO ratings after deletion
+        // This would require implementing ELO recalculation logic
+      }
+    }
+  };
+
   // Recalculate ELO from scratch (superuser only)
   const recalculateELO = async () => {
     if (!organization) return;
@@ -386,7 +400,7 @@ const ChampionshipManager = () => {
               { id: 'rankings', name: 'Rankings', icon: '🏆' },
               { id: 'new-match', name: 'New Match', icon: '➕' },
               { id: 'history', name: 'History', icon: '📊' },
-              { id: 'storage', name: 'Backup', icon: '💾' },
+              ...(user?.role === 'superuser' ? [{ id: 'storage', name: 'Backup', icon: '💾' }] : []),
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -478,12 +492,12 @@ const ChampionshipManager = () => {
                 players={players}
                 matchFilterPlayer={matchFilterPlayer}
                 setMatchFilterPlayer={setMatchFilterPlayer}
-                onDeleteMatch={() => {}} // Placeholder for now
+                onDeleteMatch={handleDeleteMatch}
                 onBackToRankings={() => setActiveTab('rankings')}
                 onPlayerStatsClick={handlePlayerStatsClick}
               />
             )}
-            {activeTab === 'storage' && (
+            {activeTab === 'storage' && user?.role === 'superuser' && (
               <StorageTab
                 players={players}
                 matches={matches}

@@ -85,12 +85,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         break;
 
       case 'DELETE':
-        // Clear all matches for the user's organization only
-        await sql`
-          DELETE FROM matches 
-          WHERE organization_id = ${currentUser.organizationId}
-        `;
-        res.status(200).json({ success: true, message: 'All matches deleted' });
+        const { matchId } = req.body;
+        
+        if (matchId) {
+          // Delete specific match - check permissions
+          const matchRows = await sql`
+            SELECT created_by FROM matches 
+            WHERE id = ${matchId} AND organization_id = ${currentUser.organizationId}
+            LIMIT 1
+          `;
+          
+          if (matchRows.length === 0) {
+            return res.status(404).json({ error: 'Match not found' });
+          }
+          
+          const match = matchRows[0];
+          
+          // Check if user can delete this match
+          const canDelete = currentUser.role === 'superuser' || match.created_by === currentUser.userId;
+          
+          if (!canDelete) {
+            return res.status(403).json({ error: 'You can only delete matches you created' });
+          }
+          
+          // Delete the specific match
+          await sql`
+            DELETE FROM matches 
+            WHERE id = ${matchId} AND organization_id = ${currentUser.organizationId}
+          `;
+          
+          res.status(200).json({ success: true, message: 'Match deleted successfully' });
+        } else {
+          // Clear all matches for the user's organization only (superuser only)
+          if (currentUser.role !== 'superuser') {
+            return res.status(403).json({ error: 'Only administrators can delete all matches' });
+          }
+          
+          await sql`
+            DELETE FROM matches 
+            WHERE organization_id = ${currentUser.organizationId}
+          `;
+          res.status(200).json({ success: true, message: 'All matches deleted' });
+        }
         break;
 
       default:

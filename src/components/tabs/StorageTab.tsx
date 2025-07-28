@@ -120,45 +120,47 @@ const StorageTab: React.FC<StorageTabProps> = ({
         </div>
       </div>
 
-      {/* Export/Import Section */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border dark:border-gray-700 shadow-sm">
-        <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Backup & Export</h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Export Data */}
-          <div className="space-y-3">
-            <h4 className="font-medium text-gray-900 dark:text-white">Export Data</h4>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              Download your data as a JSON file for backup or sharing.
-            </p>
-            <button
-              onClick={onExportData}
-              className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-blue-600 dark:bg-blue-500 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
-            >
-              <Download className="w-4 h-4" />
-              Export to File
-            </button>
-          </div>
+      {/* Export/Import Section - Superuser Only */}
+      {isSuperuser && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border dark:border-gray-700 shadow-sm">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Backup & Export</h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Export Data */}
+            <div className="space-y-3">
+              <h4 className="font-medium text-gray-900 dark:text-white">Export Data</h4>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Download your data as a JSON file for backup or sharing.
+              </p>
+              <button
+                onClick={onExportData}
+                className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-blue-600 dark:bg-blue-500 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+              >
+                <Download className="w-4 h-4" />
+                Export to File
+              </button>
+            </div>
 
-          {/* Import Data */}
-          <div className="space-y-3">
-            <h4 className="font-medium text-gray-900 dark:text-white">Import Data</h4>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              Upload a JSON file to restore or merge data.
-            </p>
-            <label className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-green-600 dark:bg-green-500 text-white rounded-md hover:bg-green-700 dark:hover:bg-green-600 transition-colors duration-200 cursor-pointer focus-within:ring-2 focus-within:ring-green-500 focus-within:ring-offset-2 dark:focus-within:ring-offset-gray-800">
-              <Upload className="w-4 h-4" />
-              Import from File
-              <input
-                type="file"
-                accept=".json"
-                onChange={onImportData}
-                className="hidden"
-              />
-            </label>
+            {/* Import Data */}
+            <div className="space-y-3">
+              <h4 className="font-medium text-gray-900 dark:text-white">Import Data</h4>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Upload a JSON file to restore or merge data.
+              </p>
+              <label className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-green-600 dark:bg-green-500 text-white rounded-md hover:bg-green-700 dark:hover:bg-green-600 transition-colors duration-200 cursor-pointer focus-within:ring-2 focus-within:ring-green-500 focus-within:ring-offset-2 dark:focus-within:ring-offset-gray-800">
+                <Upload className="w-4 h-4" />
+                Import from File
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={onImportData}
+                  className="hidden"
+                />
+              </label>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* ELO Recalculation - Superuser Only */}
       {isSuperuser && onRecalculateELO && (
@@ -219,29 +221,31 @@ const StorageTab: React.FC<StorageTabProps> = ({
         </div>
       )}
 
-      {/* Danger Zone */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border dark:border-gray-700 shadow-sm">
-        <h3 className="text-lg font-semibold mb-4 text-red-600 dark:text-red-400">Danger Zone</h3>
-        
-        <div className="space-y-3">
-          <p className="text-sm text-gray-600 dark:text-gray-300">
-            Permanently delete all players and match data. This action cannot be undone.
-          </p>
-          <button
-            onClick={onResetAll}
-            disabled={isSyncing || !isOnline}
-            className="flex items-center gap-2 py-2 px-4 bg-red-600 dark:bg-red-500 text-white rounded-md hover:bg-red-700 dark:hover:bg-red-600 transition-colors duration-200 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
-          >
-            <Trash2 className="w-4 h-4" />
-            Reset All Data
-          </button>
-          {!isOnline && (
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Database connection required to reset data
+      {/* Danger Zone - Superuser Only */}
+      {isSuperuser && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border dark:border-gray-700 shadow-sm">
+          <h3 className="text-lg font-semibold mb-4 text-red-600 dark:text-red-400">Danger Zone</h3>
+          
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Permanently delete all players and match data. This action cannot be undone.
             </p>
-          )}
+            <button
+              onClick={onResetAll}
+              disabled={isSyncing || !isOnline}
+              className="flex items-center gap-2 py-2 px-4 bg-red-600 dark:bg-red-500 text-white rounded-md hover:bg-red-700 dark:hover:bg-red-600 transition-colors duration-200 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+            >
+              <Trash2 className="w-4 h-4" />
+              Reset All Data
+            </button>
+            {!isOnline && (
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Database connection required to reset data
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
