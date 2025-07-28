@@ -10,11 +10,11 @@ import { useTheme } from '../hooks/useTheme';
 
 // Import utilities
 import { 
-  calculateELO, 
   getKFactor, 
   calculateMarginFactor, 
   findOrCreatePlayer, 
-  validateMatch 
+  validateMatch,
+  calculateUnbalancedELO
 } from '../utils/gameLogic';
 
 // Import tab components
@@ -52,10 +52,8 @@ const ChampionshipManager = () => {
 
   // Local state for UI
   const [newMatch, setNewMatch] = useState<NewMatch>({
-    team1Player1: '',
-    team1Player2: '',
-    team2Player1: '',
-    team2Player2: '',
+    team1: [''],
+    team2: [''],
     team1Score: 0,
     team2Score: 0
   });
@@ -106,10 +104,8 @@ const ChampionshipManager = () => {
     }
 
     if (!validateMatch(
-      newMatch.team1Player1,
-      newMatch.team1Player2,
-      newMatch.team2Player1,
-      newMatch.team2Player2,
+      newMatch.team1,
+      newMatch.team2,
       newMatch.team1Score,
       newMatch.team2Score
     )) {
@@ -117,10 +113,13 @@ const ChampionshipManager = () => {
       return;
     }
 
-    const player1 = findOrCreatePlayer(newMatch.team1Player1, players, setPlayers, organization.id);
-    const player2 = findOrCreatePlayer(newMatch.team1Player2, players, setPlayers, organization.id);
-    const player3 = findOrCreatePlayer(newMatch.team2Player1, players, setPlayers, organization.id);
-    const player4 = findOrCreatePlayer(newMatch.team2Player2, players, setPlayers, organization.id);
+    // Find or create all players
+    const team1Players = newMatch.team1.map(name => 
+      findOrCreatePlayer(name, players, setPlayers, organization.id)
+    );
+    const team2Players = newMatch.team2.map(name => 
+      findOrCreatePlayer(name, players, setPlayers, organization.id)
+    );
 
     // Get total points for the match
     let totalPoints = newMatch.team1Score + newMatch.team2Score;
@@ -132,65 +131,62 @@ const ChampionshipManager = () => {
       Math.abs(newMatch.team1Score - newMatch.team2Score)
     );
 
-    const team1Elo = (player1.elo + player2.elo) / 2;
-    const team2Elo = (player3.elo + player4.elo) / 2;
-
-    // Get K-factors based on experience
-    const player1K = getKFactor(player1.matches);
-    const player2K = getKFactor(player2.matches);
-    const player3K = getKFactor(player3.matches);
-    const player4K = getKFactor(player4.matches);
-
     // Calculate ELO changes for each player
-    const player1NewElo = calculateELO(player1.elo, team2Elo, newMatch.team1Score / totalPoints, player1K * marginFactor);
-    const player2NewElo = calculateELO(player2.elo, team2Elo, newMatch.team1Score / totalPoints, player2K * marginFactor);
-    const player3NewElo = calculateELO(player3.elo, team1Elo, newMatch.team2Score / totalPoints, player3K * marginFactor);
-    const player4NewElo = calculateELO(player4.elo, team1Elo, newMatch.team2Score / totalPoints, player4K * marginFactor);
+    const team1EloChanges: { [name: string]: number } = {};
+    const team2EloChanges: { [name: string]: number } = {};
+    
+    // For team 1 players
+    team1Players.forEach(player => {
+      const kFactor = getKFactor(player.matches, marginFactor);
+      const team2Ratings = team2Players.map(p => p.elo);
+      const newElo = calculateUnbalancedELO(
+        player.elo,
+        team2Ratings,
+        newMatch.team1Score / totalPoints,
+        kFactor
+      );
+      team1EloChanges[player.name] = newElo - player.elo;
+    });
 
-    // Calculate changes
-    const player1Change = player1NewElo - player1.elo;
-    const player2Change = player2NewElo - player2.elo;
-    const player3Change = player3NewElo - player3.elo;
-    const player4Change = player4NewElo - player4.elo;
+    // For team 2 players
+    team2Players.forEach(player => {
+      const kFactor = getKFactor(player.matches, marginFactor);
+      const team1Ratings = team1Players.map(p => p.elo);
+      const newElo = calculateUnbalancedELO(
+        player.elo,
+        team1Ratings,
+        newMatch.team2Score / totalPoints,
+        kFactor
+      );
+      team2EloChanges[player.name] = newElo - player.elo;
+    });
 
     // Update player stats
     setPlayers(prev => prev.map(p => {
-      if (p.id === player1.id) {
+      // Check if player is in team 1
+      const team1Player = team1Players.find(tp => tp.id === p.id);
+      if (team1Player) {
         return {
           ...p,
-          elo: player1NewElo,
+          elo: p.elo + team1EloChanges[p.name],
           matches: p.matches + 1,
           wins: p.wins + (team1Won ? 1 : 0),
           losses: p.losses + (team1Won ? 0 : 1)
         };
       }
-      if (p.id === player2.id) {
+      
+      // Check if player is in team 2
+      const team2Player = team2Players.find(tp => tp.id === p.id);
+      if (team2Player) {
         return {
           ...p,
-          elo: player2NewElo,
-          matches: p.matches + 1,
-          wins: p.wins + (team1Won ? 1 : 0),
-          losses: p.losses + (team1Won ? 0 : 1)
-        };
-      }
-      if (p.id === player3.id) {
-        return {
-          ...p,
-          elo: player3NewElo,
+          elo: p.elo + team2EloChanges[p.name],
           matches: p.matches + 1,
           wins: p.wins + (team1Won ? 0 : 1),
           losses: p.losses + (team1Won ? 1 : 0)
         };
       }
-      if (p.id === player4.id) {
-        return {
-          ...p,
-          elo: player4NewElo,
-          matches: p.matches + 1,
-          wins: p.wins + (team1Won ? 0 : 1),
-          losses: p.losses + (team1Won ? 1 : 0)
-        };
-      }
+      
       return p;
     }));
 
@@ -199,16 +195,14 @@ const ChampionshipManager = () => {
       id: Date.now(),
       date: new Date().toLocaleDateString('en-US'),
       time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-      team1: [player1.name, player2.name],
-      team2: [player3.name, player4.name],
+      team1: newMatch.team1.slice(), // Copy arrays
+      team2: newMatch.team2.slice(),
       winner: team1Won ? 'team1' : 'team2',
       team1Score: newMatch.team1Score,
       team2Score: newMatch.team2Score,
       eloChanges: {
-        [player1.name]: player1Change,
-        [player2.name]: player2Change,
-        [player3.name]: player3Change,
-        [player4.name]: player4Change
+        ...team1EloChanges,
+        ...team2EloChanges
       },
       createdBy: user?.id,
       organization_id: organization.id
@@ -218,10 +212,8 @@ const ChampionshipManager = () => {
 
     // Reset form
     setNewMatch({
-      team1Player1: '',
-      team1Player2: '',
-      team2Player1: '',
-      team2Player2: '',
+      team1: [''],
+      team2: [''],
       team1Score: 0,
       team2Score: 0
     });
@@ -303,17 +295,18 @@ const ChampionshipManager = () => {
 
       for (const match of sortedMatches) {
         // Find all players involved in this match
-        const player1 = currentPlayers.find(p => p.name === match.team1[0]);
-        const player2 = currentPlayers.find(p => p.name === match.team1[1]);
-        const player3 = currentPlayers.find(p => p.name === match.team2[0]);
-        const player4 = currentPlayers.find(p => p.name === match.team2[1]);
+        const team1Players = match.team1.map(name => 
+          currentPlayers.find(p => p.name === name)
+        ).filter(Boolean) as Player[];
+        
+        const team2Players = match.team2.map(name => 
+          currentPlayers.find(p => p.name === name)
+        ).filter(Boolean) as Player[];
 
-        // Skip if any player is missing
-        if (!player1 || !player2 || !player3 || !player4) continue;
-
-        // Calculate team averages
-        const team1Elo = (player1.elo + player2.elo) / 2;
-        const team2Elo = (player3.elo + player4.elo) / 2;
+        // Skip if any players are missing
+        if (team1Players.length !== match.team1.length || team2Players.length !== match.team2.length) {
+          continue;
+        }
 
         // Get total points for the match
         let totalPoints = match.team1Score + match.team2Score;
@@ -324,31 +317,43 @@ const ChampionshipManager = () => {
         const scoreDifference = Math.abs(match.team1Score - match.team2Score);
         const marginFactor = calculateMarginFactor(scoreDifference);
 
-        // Get K-factors
-        const player1K = getKFactor(player1.matches, marginFactor);
-        const player2K = getKFactor(player2.matches, marginFactor);
-        const player3K = getKFactor(player3.matches, marginFactor);
-        const player4K = getKFactor(player4.matches, marginFactor);
+        // Calculate ELO changes for each player
+        const team1EloChanges: { [name: string]: number } = {};
+        const team2EloChanges: { [name: string]: number } = {};
+        
+        // For team 1 players
+        team1Players.forEach(player => {
+          const kFactor = getKFactor(player.matches, marginFactor);
+          const team2Ratings = team2Players.map(p => p.elo);
+          const newElo = calculateUnbalancedELO(
+            player.elo,
+            team2Ratings,
+            match.team1Score / totalPoints,
+            kFactor
+          );
+          team1EloChanges[player.name] = newElo - player.elo;
+        });
 
-        // Calculate new ELO ratings using the user's updated calculation method
-        const player1NewElo = calculateELO(player1.elo, team2Elo, match.team1Score / totalPoints, player1K);
-        const player2NewElo = calculateELO(player2.elo, team2Elo, match.team1Score / totalPoints, player2K);
-        const player3NewElo = calculateELO(player3.elo, team1Elo, match.team2Score / totalPoints, player3K);
-        const player4NewElo = calculateELO(player4.elo, team1Elo, match.team2Score / totalPoints, player4K);
-
-        // Calculate ELO changes
-        const player1Change = player1NewElo - player1.elo;
-        const player2Change = player2NewElo - player2.elo;
-        const player3Change = player3NewElo - player3.elo;
-        const player4Change = player4NewElo - player4.elo;
+        // For team 2 players
+        team2Players.forEach(player => {
+          const kFactor = getKFactor(player.matches, marginFactor);
+          const team1Ratings = team1Players.map(p => p.elo);
+          const newElo = calculateUnbalancedELO(
+            player.elo,
+            team1Ratings,
+            match.team2Score / totalPoints,
+            kFactor
+          );
+          team2EloChanges[player.name] = newElo - player.elo;
+        });
 
         // Update player stats
-        const updatePlayerStats = (player: Player, newElo: number, won: boolean) => {
+        const updatePlayerStats = (player: Player, eloChange: number, won: boolean) => {
           const playerIndex = currentPlayers.findIndex(p => p.id === player.id);
           if (playerIndex !== -1) {
             currentPlayers[playerIndex] = {
               ...currentPlayers[playerIndex],
-              elo: newElo,
+              elo: currentPlayers[playerIndex].elo + eloChange,
               matches: currentPlayers[playerIndex].matches + 1,
               wins: currentPlayers[playerIndex].wins + (won ? 1 : 0),
               losses: currentPlayers[playerIndex].losses + (won ? 0 : 1)
@@ -356,19 +361,22 @@ const ChampionshipManager = () => {
           }
         };
 
-        updatePlayerStats(player1, player1NewElo, team1Won);
-        updatePlayerStats(player2, player2NewElo, team1Won);
-        updatePlayerStats(player3, player3NewElo, !team1Won);
-        updatePlayerStats(player4, player4NewElo, !team1Won);
+        // Update all team 1 players
+        team1Players.forEach(player => {
+          updatePlayerStats(player, team1EloChanges[player.name], team1Won);
+        });
+
+        // Update all team 2 players
+        team2Players.forEach(player => {
+          updatePlayerStats(player, team2EloChanges[player.name], !team1Won);
+        });
 
         // Create updated match with new ELO changes
         const updatedMatch = {
           ...match,
           eloChanges: {
-            [player1.name]: player1Change,
-            [player2.name]: player2Change,
-            [player3.name]: player3Change,
-            [player4.name]: player4Change
+            ...team1EloChanges,
+            ...team2EloChanges
           }
         };
 

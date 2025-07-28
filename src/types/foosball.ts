@@ -33,10 +33,8 @@ export interface Match {
 }
 
 export interface NewMatch {
-  team1Player1: string;
-  team1Player2: string;
-  team2Player1: string;
-  team2Player2: string;
+  team1: string[];
+  team2: string[];
   team1Score: number;
   team2Score: number;
 }

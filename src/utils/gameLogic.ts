@@ -46,20 +46,48 @@ export const findOrCreatePlayer = (
   return newPlayer;
 };
 
+// Calculate ELO for unbalanced teams
+export const calculateUnbalancedELO = (
+  playerRating: number,
+  opponentTeamRatings: number[],
+  actualScore: number,
+  kFactor: number = 32
+) => {
+  // Calculate team strength as average, but apply a team size penalty/bonus
+  const teamSize = opponentTeamRatings.length;
+  const avgOpponentRating = opponentTeamRatings.reduce((sum, rating) => sum + rating, 0) / teamSize;
+  
+  // Apply team size modifier - larger teams get a slight advantage
+  const teamSizeModifier = Math.log(teamSize) * 50; // Logarithmic scaling
+  const adjustedOpponentRating = avgOpponentRating + teamSizeModifier;
+  
+  const expectedScore = 1 / (1 + Math.pow(10, (adjustedOpponentRating - playerRating) / 400));
+  return Math.round(playerRating + kFactor * (actualScore - expectedScore));
+};
+
+// Calculate team average ELO
+export const calculateTeamELO = (players: Player[]) => {
+  if (players.length === 0) return 1200;
+  return players.reduce((sum, player) => sum + player.elo, 0) / players.length;
+};
+
 // Validate match data
 export const validateMatch = (
-  team1Player1: string,
-  team1Player2: string,
-  team2Player1: string,
-  team2Player2: string,
+  team1: string[],
+  team2: string[],
   team1Score: number,
   team2Score: number
 ): boolean => {
   return !!(
-    team1Player1 && 
-    team1Player2 && 
-    team2Player1 && 
-    team2Player2 && 
-    team1Score !== team2Score
+    team1.length > 0 && 
+    team2.length > 0 && 
+    team1.every(name => name.trim()) && 
+    team2.every(name => name.trim()) && 
+    team1Score !== team2Score &&
+    // Ensure no duplicate players across teams
+    !team1.some(p1 => team2.some(p2 => p1.toLowerCase() === p2.toLowerCase())) &&
+    // Ensure no duplicate players within teams
+    team1.length === new Set(team1.map(p => p.toLowerCase())).size &&
+    team2.length === new Set(team2.map(p => p.toLowerCase())).size
   );
 }; 
