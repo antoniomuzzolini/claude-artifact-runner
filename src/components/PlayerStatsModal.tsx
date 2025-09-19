@@ -122,6 +122,21 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
   // Calculate overall win rate
   const winRate = player.matches > 0 ? (player.wins / player.matches * 100).toFixed(1) : '0.0';
 
+  // Calculate total points made and received
+  let totalPointsMade = 0;
+  let totalPointsReceived = 0;
+
+  playerMatches.forEach(match => {
+    const isTeam1 = match.team1.includes(player.name);
+    if (isTeam1) {
+      totalPointsMade += match.team1Score;
+      totalPointsReceived += match.team2Score;
+    } else {
+      totalPointsMade += match.team2Score;
+      totalPointsReceived += match.team1Score;
+    }
+  });
+
   // Get best and worst teammates/opponents
   const bestTeammate = sortedTeammates[0];
   const worstTeammate = sortedTeammates[sortedTeammates.length - 1];
@@ -162,7 +177,7 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
           {/* Content */}
           <div className="p-6">
             {/* Basic Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
               <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 text-center border border-blue-200 dark:border-blue-800">
                 <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{player.elo}</div>
                 <div className="text-sm text-blue-600 dark:text-blue-400 font-medium">ELO Rating</div>
@@ -178,6 +193,14 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
               <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4 text-center border border-purple-200 dark:border-purple-800">
                 <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{winRate}%</div>
                 <div className="text-sm text-purple-600 dark:text-purple-400 font-medium">Win Rate</div>
+              </div>
+              <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 text-center border border-orange-200 dark:border-orange-800">
+                <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{totalPointsMade}</div>
+                <div className="text-sm text-orange-600 dark:text-orange-400 font-medium">Points Made</div>
+              </div>
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-4 text-center border border-yellow-200 dark:border-yellow-800">
+                <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{totalPointsReceived}</div>
+                <div className="text-sm text-yellow-600 dark:text-yellow-400 font-medium">Points Received</div>
               </div>
             </div>
 
