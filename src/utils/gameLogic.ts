@@ -6,17 +6,6 @@ export const calculateELO = (playerRating: number, opponentRating: number, actua
   return Math.round(playerRating + kFactor * (actualScore - expectedScore));
 };
 
-// Get adaptive K-factor based on player experience and match margin
-export const getKFactor = (matches: number, marginFactor: number = 1) => {
-  const baseFactor = matches < 10 ? 40 : matches < 20 ? 32 : 24;
-  return Math.round(baseFactor * marginFactor);
-};
-
-// Calculate margin factor based on score difference
-export const calculateMarginFactor = (scoreDifference: number) => {
-  return Math.min(1 + (scoreDifference - 1) * 0.1, 2); // Max 2x multiplier
-};
-
 // Find or create player
 export const findOrCreatePlayer = (
   name: string, 
@@ -44,31 +33,6 @@ export const findOrCreatePlayer = (
   
   setPlayers(prev => [...prev, newPlayer]);
   return newPlayer;
-};
-
-// Calculate ELO for unbalanced teams
-export const calculateUnbalancedELO = (
-  playerRating: number,
-  opponentTeamRatings: number[],
-  actualScore: number,
-  kFactor: number = 32
-) => {
-  // Calculate team strength as average, but apply a team size penalty/bonus
-  const teamSize = opponentTeamRatings.length;
-  const avgOpponentRating = opponentTeamRatings.reduce((sum, rating) => sum + rating, 0) / teamSize;
-  
-  // Apply team size modifier - larger teams get a slight advantage
-  const teamSizeModifier = Math.log(teamSize) * 50; // Logarithmic scaling
-  const adjustedOpponentRating = avgOpponentRating + teamSizeModifier;
-  
-  const expectedScore = 1 / (1 + Math.pow(10, (adjustedOpponentRating - playerRating) / 400));
-  return Math.round(playerRating + kFactor * (actualScore - expectedScore));
-};
-
-// Calculate team average ELO
-export const calculateTeamELO = (players: Player[]) => {
-  if (players.length === 0) return 1200;
-  return players.reduce((sum, player) => sum + player.elo, 0) / players.length;
 };
 
 // Validate match data
