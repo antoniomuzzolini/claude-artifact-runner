@@ -1,9 +1,9 @@
 import { Player } from '../types/foosball';
 
 // Calculate ELO rating
-export const calculateELO = (playerRating: number, opponentRating: number, actualScore: number, kFactor = 32) => {
+export const calculateELODifference = (playerRating: number, opponentRating: number, actualScore: number, kFactor = 32) => {
   const expectedScore = 1 / (1 + Math.pow(10, (opponentRating - playerRating) / 400));
-  return Math.round(playerRating + kFactor * (actualScore - expectedScore));
+  return Math.round(kFactor * (actualScore - expectedScore));
 };
 
 // Find or create player

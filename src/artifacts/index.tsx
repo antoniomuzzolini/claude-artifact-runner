@@ -12,7 +12,7 @@ import { useTheme } from '../hooks/useTheme';
 import { 
   findOrCreatePlayer, 
   validateMatch,
-  calculateELO
+  calculateELODifference
 } from '../utils/gameLogic';
 
 // Import tab components
@@ -131,16 +131,16 @@ const ChampionshipManager = () => {
     const minTeamSize = Math.min(team1Players.length, team2Players.length) || 1;
     
     team1Players.forEach(player => {
+      if (!team1EloChanges[player.name]) team1EloChanges[player.name] = 0;
       team2Players.forEach(opponent => {
-        const newElo = calculateELO(
+        if (!team2EloChanges[opponent.name]) team2EloChanges[opponent.name] = 0;
+        const newElo = Math.round(calculateELODifference(
           player.elo,
           opponent.elo,
           newMatch.team1Score / totalPoints
-        );
-        if (!team1EloChanges[player.name]) team1EloChanges[player.name] = 0;
-        if (!team2EloChanges[opponent.name]) team2EloChanges[opponent.name] = 0;
-        team1EloChanges[player.name] += (newElo - player.elo) / minTeamSize; // Average out ELO change across opponents
-        team2EloChanges[opponent.name] += (opponent.elo - newElo) / minTeamSize; // Average out ELO change across opponents
+        ) / minTeamSize);
+        team1EloChanges[player.name] += newElo; // Average out ELO change across opponents
+        team2EloChanges[opponent.name] += -newElo; // Average out ELO change across opponents
       });
     });
 
@@ -303,16 +303,16 @@ const ChampionshipManager = () => {
         const minTeamSize = Math.min(team1Players.length, team2Players.length) || 1;
         
         team1Players.forEach(player => {
+          if (!team1EloChanges[player.name]) team1EloChanges[player.name] = 0;
           team2Players.forEach(opponent => {
-            const newElo = calculateELO(
+            if (!team2EloChanges[opponent.name]) team2EloChanges[opponent.name] = 0;
+            const newElo = Math.round(calculateELODifference(
               player.elo,
               opponent.elo,
               newMatch.team1Score / totalPoints
-            );
-            if (!team1EloChanges[player.name]) team1EloChanges[player.name] = 0;
-            if (!team2EloChanges[opponent.name]) team2EloChanges[opponent.name] = 0;
-            team1EloChanges[player.name] += (newElo - player.elo) / minTeamSize; // Average out ELO change across opponents
-            team2EloChanges[opponent.name] += (opponent.elo - newElo) / minTeamSize; // Average out ELO change across opponents
+            ) / minTeamSize);
+            team1EloChanges[player.name] += newElo; // Average out ELO change across opponents
+            team2EloChanges[opponent.name] += -newElo; // Average out ELO change across opponents
           });
         });
 
