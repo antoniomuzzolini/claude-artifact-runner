@@ -1,44 +1,19 @@
-'use client';
-
-import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import CompleteInvitation from '../../components/auth/CompleteInvitation';
+import { redirect } from 'next/navigation';
+import CompleteInvitationClient from './CompleteInvitationClient';
 
 export const dynamic = 'force-dynamic';
 
-export default function CompleteInvitationPage() {
-  const [token, setToken] = useState<string | null>(null);
-  const searchParams = useSearchParams();
-  const router = useRouter();
+interface CompleteInvitationPageProps {
+  searchParams?: { token?: string | string[] };
+}
 
-  useEffect(() => {
-    const tokenParam = searchParams.get('token');
-    if (tokenParam) {
-      setToken(tokenParam);
-    } else {
-      router.replace('/');
-    }
-  }, [searchParams, router]);
-
-  const handleComplete = () => {
-    router.replace('/');
-  };
+export default function CompleteInvitationPage({ searchParams }: CompleteInvitationPageProps) {
+  const tokenParam = searchParams?.token;
+  const token = Array.isArray(tokenParam) ? tokenParam[0] : tokenParam;
 
   if (!token) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="text-xl text-gray-600">Loading...</div>
-        </div>
-      </div>
-    );
+    redirect('/');
   }
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full">
-        <CompleteInvitation token={token} onComplete={handleComplete} />
-      </div>
-    </div>
-  );
+  return <CompleteInvitationClient token={token} />;
 }
