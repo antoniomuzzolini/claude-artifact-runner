@@ -1,3 +1,5 @@
+﻿"use client";
+
 import React from 'react';
 import { Clock, Trash2 } from 'lucide-react';
 import { Player, Match } from '../../types/foosball';
@@ -102,7 +104,7 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                       : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'
                   }`}>
                     <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-                      Team 1 {match.winner === 'team1' && '👑'}
+                      Team 1 {match.winner === 'team1' && 'ðŸ‘‘'}
                     </div>
                     <div className="space-y-1">
                       {match.team1.map((player, index) => (
@@ -141,7 +143,7 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                       : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'
                   }`}>
                     <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-                      Team 2 {match.winner === 'team2' && '👑'}
+                      Team 2 {match.winner === 'team2' && 'ðŸ‘‘'}
                     </div>
                     <div className="space-y-1">
                       {match.team2.map((player, index) => (

@@ -1,3 +1,5 @@
+﻿"use client";
+
 import { useState, useEffect, useCallback } from 'react';
 import { User, LoginCredentials, AuthResponse, getPermissions, OrganizationSetupData } from '../types/auth';
 import { Organization } from '../types/foosball';

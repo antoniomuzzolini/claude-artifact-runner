@@ -1,3 +1,5 @@
+﻿"use client";
+
 import React, { useState } from 'react';
 import { Building2, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { OrganizationSetupData } from '../../types/auth';
@@ -56,7 +58,7 @@ const OrganizationSetup: React.FC<OrganizationSetupProps> = ({
       <div className="max-w-md w-full space-y-8 p-8">
         {/* Header */}
         <div className="text-center">
-          <div className="text-4xl mb-4">🏢</div>
+          <div className="text-4xl mb-4">ðŸ¢</div>
           <h2 className="text-3xl font-bold text-gray-900">Create Organization</h2>
           <p className="mt-2 text-sm text-gray-600">Set up your championship organization and admin account</p>
         </div>

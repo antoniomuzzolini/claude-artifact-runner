@@ -1,3 +1,5 @@
+﻿"use client";
+
 import { useState, useEffect, useCallback } from 'react';
 import { AppData, Player, Match } from '../types/foosball';
 import { useAuth } from './useAuth';
@@ -37,7 +39,7 @@ export const useNeonDB = () => {
 
       if (response.ok) {
         setLastSaved(new Date());
-        console.log('✅ Data saved to Neon DB');
+        console.log('âœ… Data saved to Neon DB');
         return true;
       } else {
         const errorData = await response.json();
@@ -45,7 +47,7 @@ export const useNeonDB = () => {
         return false;
       }
     } catch (error) {
-      console.error('❌ Error saving data:', error);
+      console.error('âŒ Error saving data:', error);
       setError('Error saving data to database');
       return false;
     } finally {
@@ -75,13 +77,13 @@ export const useNeonDB = () => {
           setPlayers(cloudData.players || []);
           setMatches(cloudData.matches || []);
           setLastSaved(cloudData.lastSaved ? new Date(cloudData.lastSaved) : null);
-          console.log('☁️ Data loaded from Neon DB');
+          console.log('â˜ï¸ Data loaded from Neon DB');
         } else {
           // No data in database yet - start fresh
           setPlayers([]);
           setMatches([]);
           setLastSaved(null);
-          console.log('📊 No data found - starting fresh');
+          console.log('ðŸ“Š No data found - starting fresh');
         }
       } else {
         setIsOnline(false);
@@ -89,7 +91,7 @@ export const useNeonDB = () => {
         setError(errorData.error || 'Database not available - please check your connection');
       }
     } catch (error) {
-      console.error('❌ Error loading data:', error);
+      console.error('âŒ Error loading data:', error);
       setIsOnline(false);
       setError('Error loading data from database');
     } finally {
@@ -117,9 +119,9 @@ export const useNeonDB = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
-      console.log('📁 Data exported to file');
+      console.log('ðŸ“ Data exported to file');
     } catch (error) {
-      console.error('❌ Error exporting data:', error);
+      console.error('âŒ Error exporting data:', error);
       setError('Error exporting data');
     }
   };
@@ -155,13 +157,13 @@ export const useNeonDB = () => {
       });
       
       if (response.ok) {
-        console.log('✅ Data imported and saved to Neon DB');
+        console.log('âœ… Data imported and saved to Neon DB');
       } else {
         const errorData = await response.json();
         setError(errorData.error || 'Failed to save imported data to database');
       }
     } catch (error) {
-      console.error('❌ Error importing data:', error);
+      console.error('âŒ Error importing data:', error);
       setError('Error importing data');
     } finally {
       setIsSyncing(false);
@@ -193,13 +195,13 @@ export const useNeonDB = () => {
         setPlayers([]);
         setMatches([]);
         setLastSaved(null);
-        console.log('✅ All data cleared from Neon DB');
+        console.log('âœ… All data cleared from Neon DB');
       } else {
         const errorData = await response.json();
         setError(errorData.error || 'Failed to clear data from database');
       }
     } catch (error) {
-      console.error('❌ Error resetting data:', error);
+      console.error('âŒ Error resetting data:', error);
       setError('Error clearing data');
       throw error;
     } finally {
@@ -236,7 +238,7 @@ export const useNeonDB = () => {
       if (response.ok) {
         // Remove match from local state
         setMatches(prev => prev.filter(match => match.id !== matchId));
-        console.log('✅ Match deleted successfully');
+        console.log('âœ… Match deleted successfully');
         return true;
       } else {
         const errorData = await response.json();
@@ -244,7 +246,7 @@ export const useNeonDB = () => {
         return false;
       }
     } catch (error) {
-      console.error('❌ Error deleting match:', error);
+      console.error('âŒ Error deleting match:', error);
       setError('Error deleting match');
       return false;
     } finally {

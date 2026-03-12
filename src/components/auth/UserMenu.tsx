@@ -1,3 +1,5 @@
+﻿"use client";
+
 import React, { useState } from 'react';
 import { LogOut, Users, User, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';

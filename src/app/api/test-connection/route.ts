@@ -1,18 +1,24 @@
 import { neon } from '@neondatabase/serverless';
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { NextResponse } from 'next/server';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Add CORS headers
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+export const runtime = 'nodejs';
 
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
+const corsHeaders = {
+  'Access-Control-Allow-Credentials': 'true',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET,OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
 
+function jsonResponse(data: unknown, status = 200) {
+  return NextResponse.json(data, { status, headers: corsHeaders });
+}
+
+export function OPTIONS() {
+  return new NextResponse(null, { status: 200, headers: corsHeaders });
+}
+
+export async function GET() {
   const diagnostics = {
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV,
@@ -22,20 +28,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (!process.env.DATABASE_URL) {
-      return res.status(500).json({ 
+      return jsonResponse({ 
         ...diagnostics,
         error: 'DATABASE_URL environment variable not found',
         success: false
-      });
+      }, 500);
     }
 
-    // Try to create SQL connection
     const sql = neon(process.env.DATABASE_URL);
-    
-    // Simple test query
     const result = await sql`SELECT 1 as test, current_timestamp as time`;
-    
-    return res.status(200).json({ 
+
+    return jsonResponse({ 
       ...diagnostics,
       success: true,
       message: 'Database connection successful',
@@ -45,15 +48,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         note: 'Will check in next step'
       }
     });
-    
+
   } catch (error) {
     console.error('Database connection error:', error);
-    return res.status(500).json({ 
+    const message = error instanceof Error ? error.message : 'Database connection failed';
+    const name = error instanceof Error ? error.name : 'Error';
+    return jsonResponse({ 
       ...diagnostics,
       success: false,
       error: 'Database connection failed',
-      errorMessage: error.message,
-      errorName: error.name
-    });
+      errorMessage: message,
+      errorName: name
+    }, 500);
   }
-} 
+}

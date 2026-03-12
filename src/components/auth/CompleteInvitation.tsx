@@ -1,3 +1,5 @@
+﻿"use client";
+
 import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
@@ -153,7 +155,7 @@ const CompleteInvitation: React.FC<CompleteInvitationProps> = ({ token, onComple
       <div className="max-w-md w-full space-y-8 p-8">
         {/* Header */}
         <div className="text-center">
-          <div className="text-4xl mb-4">✉️</div>
+          <div className="text-4xl mb-4">âœ‰ï¸</div>
           <h2 className="text-3xl font-bold text-gray-900">Complete Your Invitation</h2>
           <p className="mt-2 text-sm text-gray-600">
             You've been invited to join the Championship Manager

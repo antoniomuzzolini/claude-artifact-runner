@@ -1,4 +1,7 @@
+﻿"use client";
+
 import React, { useState, useEffect } from 'react';
+import { Trophy, PlusCircle, BarChart3, Settings } from 'lucide-react';
 
 // Import types
 import { Match, NewMatch, AppData, Player } from '../types/foosball';
@@ -7,6 +10,7 @@ import { Match, NewMatch, AppData, Player } from '../types/foosball';
 import { useNeonDB } from '../hooks/useNeonDB';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
+import { useSettings } from '../hooks/useSettings';
 
 // Import utilities
 import { 
@@ -30,6 +34,12 @@ const ChampionshipManager = () => {
   
   // Use authentication context
   const { user, organization } = useAuth();
+  const {
+    minMatchesForRanking,
+    isLoading: isSettingsLoading,
+    isSaving: isSettingsSaving,
+    updateMinMatchesForRanking
+  } = useSettings();
   
   // Use the simplified cloud-only data management
   const {
@@ -383,10 +393,10 @@ const ChampionshipManager = () => {
         <div className="flex justify-center mb-8">
           <nav className="flex space-x-8" aria-label="Tabs">
             {[
-              { id: 'rankings', name: 'Rankings', icon: '🏆' },
-              { id: 'new-match', name: 'New Match', icon: '➕' },
-              { id: 'history', name: 'History', icon: '📊' },
-              ...(user?.role === 'superuser' ? [{ id: 'storage', name: 'Backup', icon: '💾' }] : []),
+              { id: 'rankings', name: 'Rankings', Icon: Trophy },
+              { id: 'new-match', name: 'New Match', Icon: PlusCircle },
+              { id: 'history', name: 'History', Icon: BarChart3 },
+              ...(user?.role === 'superuser' ? [{ id: 'storage', name: 'Settings', Icon: Settings }] : []),
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -395,10 +405,10 @@ const ChampionshipManager = () => {
                   activeTab === tab.id
                     ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                     : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-                } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200`}
+                } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-200 flex items-center gap-2`}
               >
-                <span className="mr-2">{tab.icon}</span>
-                {tab.name}
+                <tab.Icon className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only sm:not-sr-only">{tab.name}</span>
               </button>
             ))}
           </nav>
@@ -449,6 +459,7 @@ const ChampionshipManager = () => {
             {activeTab === 'rankings' && (
               <RankingsTab 
                 players={players} 
+                minMatchesForRanking={minMatchesForRanking}
                 onPlayerClick={handlePlayerClick}
                 onPlayerStatsClick={handlePlayerStatsClick}
               />
@@ -458,7 +469,7 @@ const ChampionshipManager = () => {
                 {error ? (
                   <div className="text-center py-8">
                     <div className="text-red-600 dark:text-red-400 mb-4">
-                      ⚠️ Cannot add matches - database error
+                      âš ï¸ Cannot add matches - database error
                     </div>
                     <p className="text-gray-600 dark:text-gray-400">{error}</p>
                   </div>
@@ -490,6 +501,10 @@ const ChampionshipManager = () => {
                 isOnline={isOnline}
                 isSyncing={isSyncing}
                 error={error}
+                minMatchesForRanking={minMatchesForRanking}
+                isSettingsLoading={isSettingsLoading}
+                isSettingsSaving={isSettingsSaving}
+                onUpdateMinMatchesForRanking={updateMinMatchesForRanking}
                 onExportData={exportDataToFile}
                 onImportData={handleImportFile}
                 onResetAll={resetAll}

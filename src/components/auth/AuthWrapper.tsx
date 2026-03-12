@@ -1,3 +1,5 @@
+﻿"use client";
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import LoginForm from './LoginForm';

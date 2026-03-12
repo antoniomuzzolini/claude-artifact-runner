@@ -1,3 +1,5 @@
+﻿"use client";
+
 import React from 'react';
 import { X, Target, Users } from 'lucide-react';
 import { Player, Match } from '../types/foosball';

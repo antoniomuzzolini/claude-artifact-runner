@@ -1,3 +1,5 @@
+﻿"use client";
+
 import React, { useState, useEffect } from 'react';
 import { X, UserPlus, Mail, User, Shield, Trash2, Copy, Clock } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';

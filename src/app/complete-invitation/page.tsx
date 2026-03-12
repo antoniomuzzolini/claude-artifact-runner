@@ -1,25 +1,25 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import CompleteInvitation from '../components/auth/CompleteInvitation';
+'use client';
 
-const CompleteInvitationPage: React.FC = () => {
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import CompleteInvitation from '../../components/auth/CompleteInvitation';
+
+export default function CompleteInvitationPage() {
   const [token, setToken] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
   useEffect(() => {
     const tokenParam = searchParams.get('token');
     if (tokenParam) {
       setToken(tokenParam);
     } else {
-      // No token provided, redirect to home
-      navigate('/');
+      router.replace('/');
     }
-  }, [searchParams, navigate]);
+  }, [searchParams, router]);
 
   const handleComplete = () => {
-    // Redirect to home page after successful completion
-    navigate('/');
+    router.replace('/');
   };
 
   if (!token) {
@@ -39,6 +39,4 @@ const CompleteInvitationPage: React.FC = () => {
       </div>
     </div>
   );
-};
-
-export default CompleteInvitationPage; 
+}

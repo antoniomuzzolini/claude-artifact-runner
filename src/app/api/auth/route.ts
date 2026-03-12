@@ -1,80 +1,76 @@
 import { neon } from '@neondatabase/serverless';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { NextRequest, NextResponse } from 'next/server';
+
+export const runtime = 'nodejs';
 
 const sql = neon(process.env.DATABASE_URL!);
 const JWT_SECRET = process.env.JWT_SECRET || 'your-fallback-secret-key-change-in-production';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Add CORS headers
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+const corsHeaders = {
+  'Access-Control-Allow-Credentials': 'true',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
 
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
+function jsonResponse(data: unknown, status = 200) {
+  return NextResponse.json(data, { status, headers: corsHeaders });
+}
 
+export function OPTIONS() {
+  return new NextResponse(null, { status: 200, headers: corsHeaders });
+}
+
+export async function GET(req: NextRequest) {
   try {
-    if (req.method === 'POST') {
-      const { action, email, password, username, token } = req.body;
-
-      switch (action) {
-        case 'login':
-          return await handleLogin(email, password, res);
-        
-        case 'register':
-          return await handleRegister(email, username, password, req, res);
-        
-        case 'verify':
-          return await handleVerifyToken(token, res);
-        
-        case 'invite':
-          return await handleInviteUser(email, req, res);
-        
-        case 'complete-invitation':
-          return await handleCompleteInvitation(req.body.token, username, password, res);
-        
-        case 'verify-invitation':
-          return await handleVerifyInvitation(req.body.token, res);
-        
-        default:
-          return res.status(400).json({ error: 'Invalid action' });
-      }
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return jsonResponse({ error: 'No token provided' }, 401);
     }
 
-    if (req.method === 'GET') {
-      // Verify token from Authorization header
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'No token provided' });
-      }
-
-      const token = authHeader.substring(7);
-      return await handleVerifyToken(token, res);
-    }
-
-    res.setHeader('Allow', ['GET', 'POST']);
-    res.status(405).end(`Method ${req.method} Not Allowed`);
-
+    const token = authHeader.substring(7);
+    return await handleVerifyToken(token);
   } catch (error) {
     console.error('Auth error:', error);
-    return res.status(500).json({ 
-      error: 'Authentication failed',
-      message: error.message 
-    });
+    const message = error instanceof Error ? error.message : 'Authentication failed';
+    return jsonResponse({ error: 'Authentication failed', message }, 500);
   }
 }
 
-async function handleLogin(email: string, password: string, res: VercelResponse) {
+export async function POST(req: NextRequest) {
+  try {
+    const { action, email, password, username, token } = await req.json();
+
+    switch (action) {
+      case 'login':
+        return await handleLogin(email, password);
+      case 'register':
+        return await handleRegister(email, username, password, req);
+      case 'verify':
+        return await handleVerifyToken(token);
+      case 'invite':
+        return await handleInviteUser(email, req);
+      case 'complete-invitation':
+        return await handleCompleteInvitation(token, username, password);
+      case 'verify-invitation':
+        return await handleVerifyInvitation(token);
+      default:
+        return jsonResponse({ error: 'Invalid action' }, 400);
+    }
+  } catch (error) {
+    console.error('Auth error:', error);
+    const message = error instanceof Error ? error.message : 'Authentication failed';
+    return jsonResponse({ error: 'Authentication failed', message }, 500);
+  }
+}
+
+async function handleLogin(email: string, password: string) {
   if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
+    return jsonResponse({ error: 'Email and password are required' }, 400);
   }
 
-  // Find user by email
   const users = await sql`
     SELECT id, email, username, password_hash, role, status, created_at, last_login, organization_id
     FROM users 
@@ -83,23 +79,20 @@ async function handleLogin(email: string, password: string, res: VercelResponse)
   `;
 
   if (users.length === 0) {
-    return res.status(401).json({ error: 'Invalid email or password' });
+    return jsonResponse({ error: 'Invalid email or password' }, 401);
   }
 
   const user = users[0];
 
-  // Check if user account is active
   if (user.status !== 'active') {
-    return res.status(401).json({ error: 'Account not active or pending setup' });
+    return jsonResponse({ error: 'Account not active or pending setup' }, 401);
   }
 
-  // Verify password
   const isValidPassword = await bcrypt.compare(password, user.password_hash);
   if (!isValidPassword) {
-    return res.status(401).json({ error: 'Invalid email or password' });
+    return jsonResponse({ error: 'Invalid email or password' }, 401);
   }
 
-  // Get organization info if user belongs to one
   let organization = null;
   if (user.organization_id) {
     const orgs = await sql`
@@ -111,14 +104,12 @@ async function handleLogin(email: string, password: string, res: VercelResponse)
     organization = orgs[0] || null;
   }
 
-  // Update last login
   await sql`
     UPDATE users 
     SET last_login = NOW() 
     WHERE id = ${user.id};
   `;
 
-  // Generate JWT token
   const token = jwt.sign(
     { 
       userId: user.id, 
@@ -130,10 +121,9 @@ async function handleLogin(email: string, password: string, res: VercelResponse)
     { expiresIn: '7d' }
   );
 
-  // Remove password hash from response
   const { password_hash, ...userWithoutPassword } = user;
 
-  return res.status(200).json({
+  return jsonResponse({
     success: true,
     user: userWithoutPassword,
     organization: organization,
@@ -142,31 +132,34 @@ async function handleLogin(email: string, password: string, res: VercelResponse)
   });
 }
 
-async function handleRegister(email: string, username: string, password: string, req: VercelRequest, res: VercelResponse) {
+async function handleRegister(
+  email: string,
+  username: string,
+  password: string,
+  req: NextRequest
+) {
   if (!email || !username || !password) {
-    return res.status(400).json({ error: 'Email, username, and password are required' });
+    return jsonResponse({ error: 'Email, username, and password are required' }, 400);
   }
 
-  // Verify that the requester is a superuser (only superusers can create accounts)
-  const authHeader = req.headers.authorization;
+  const authHeader = req.headers.get('authorization');
   if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Authentication required to create users' });
+    return jsonResponse({ error: 'Authentication required to create users' }, 401);
   }
 
   const token = authHeader.substring(7);
   let currentUser;
-  
+
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
     if (decoded.role !== 'superuser') {
-      return res.status(403).json({ error: 'Only superusers can create new accounts' });
+      return jsonResponse({ error: 'Only superusers can create new accounts' }, 403);
     }
     currentUser = decoded;
   } catch (error) {
-    return res.status(401).json({ error: 'Invalid token' });
+    return jsonResponse({ error: 'Invalid token' }, 401);
   }
 
-  // Check if user already exists
   const existingUsers = await sql`
     SELECT id FROM users 
     WHERE email = ${email} OR username = ${username}
@@ -174,13 +167,11 @@ async function handleRegister(email: string, username: string, password: string,
   `;
 
   if (existingUsers.length > 0) {
-    return res.status(400).json({ error: 'User with this email or username already exists' });
+    return jsonResponse({ error: 'User with this email or username already exists' }, 400);
   }
 
-  // Hash password
   const hashedPassword = await bcrypt.hash(password, 12);
 
-  // Create user in the same organization as the current user
   const newUsers = await sql`
     INSERT INTO users (email, username, password_hash, role, created_by, organization_id)
     VALUES (${email}, ${username}, ${hashedPassword}, 'user', ${currentUser.userId}, ${currentUser.organizationId})
@@ -189,38 +180,36 @@ async function handleRegister(email: string, username: string, password: string,
 
   const newUser = newUsers[0];
 
-  return res.status(201).json({
+  return jsonResponse({
     success: true,
     user: newUser,
     message: 'User created successfully'
-  });
+  }, 201);
 }
 
-async function handleInviteUser(email: string, req: VercelRequest, res: VercelResponse) {
+async function handleInviteUser(email: string, req: NextRequest) {
   if (!email) {
-    return res.status(400).json({ error: 'Email is required' });
+    return jsonResponse({ error: 'Email is required' }, 400);
   }
 
-  // Verify that the requester is a superuser
-  const authHeader = req.headers.authorization;
+  const authHeader = req.headers.get('authorization');
   if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Authentication required to invite users' });
+    return jsonResponse({ error: 'Authentication required to invite users' }, 401);
   }
 
   const token = authHeader.substring(7);
   let currentUser;
-  
+
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
     if (decoded.role !== 'superuser') {
-      return res.status(403).json({ error: 'Only administrators can invite users' });
+      return jsonResponse({ error: 'Only administrators can invite users' }, 403);
     }
     currentUser = decoded;
   } catch (error) {
-    return res.status(401).json({ error: 'Invalid token' });
+    return jsonResponse({ error: 'Invalid token' }, 401);
   }
 
-  // Check if user already exists in this organization
   const existingUsers = await sql`
     SELECT id FROM users 
     WHERE email = ${email} AND organization_id = ${currentUser.organizationId}
@@ -228,36 +217,32 @@ async function handleInviteUser(email: string, req: VercelRequest, res: VercelRe
   `;
 
   if (existingUsers.length > 0) {
-    return res.status(400).json({ error: 'User with this email already exists in your organization' });
+    return jsonResponse({ error: 'User with this email already exists in your organization' }, 400);
   }
 
-  // Generate invitation token
   const invitationToken = jwt.sign(
     { email, invitedBy: currentUser.userId, organizationId: currentUser.organizationId, type: 'invitation' },
     JWT_SECRET,
     { expiresIn: '7d' }
   );
 
-  // Generate unique username
   let baseUsername = email.split('@')[0];
   let username = baseUsername;
   let counter = 1;
 
-  // Check for existing usernames in this organization and generate unique one
   while (true) {
     const existingUsername = await sql`
       SELECT id FROM users WHERE username = ${username} AND organization_id = ${currentUser.organizationId} LIMIT 1;
     `;
     
     if (existingUsername.length === 0) {
-      break; // Username is unique within this organization
+      break;
     }
     
     username = `${baseUsername}${counter}`;
     counter++;
   }
 
-  // Create pending user
   try {
     const newUsers = await sql`
       INSERT INTO users (email, username, password_hash, role, status, created_by, invitation_token, organization_id)
@@ -266,48 +251,46 @@ async function handleInviteUser(email: string, req: VercelRequest, res: VercelRe
     `;
 
     const newUser = newUsers[0];
+    const origin = req.headers.get('origin') || req.nextUrl.origin;
 
-    return res.status(201).json({
+    return jsonResponse({
       success: true,
       user: newUser,
       invitationToken,
       message: `User invitation created successfully with username: ${username}`,
-      invitationUrl: `${req.headers.origin || ''}/complete-invitation?token=${invitationToken}`
-    });
+      invitationUrl: `${origin}/complete-invitation?token=${invitationToken}`
+    }, 201);
   } catch (error: any) {
     console.error('Error creating user invitation:', error);
     
-    if (error.code === '23505') {
-      // Unique constraint violation
+    if (error?.code === '23505') {
       if (error.constraint?.includes('email')) {
-        return res.status(400).json({ error: 'User with this email already exists' });
+        return jsonResponse({ error: 'User with this email already exists' }, 400);
       } else if (error.constraint?.includes('username')) {
-        return res.status(400).json({ error: 'Username conflict occurred, please try again' });
+        return jsonResponse({ error: 'Username conflict occurred, please try again' }, 400);
       }
     }
     
-    return res.status(500).json({ error: 'Failed to create user invitation' });
+    return jsonResponse({ error: 'Failed to create user invitation' }, 500);
   }
 }
 
-async function handleCompleteInvitation(token: string, username: string, password: string, res: VercelResponse) {
+async function handleCompleteInvitation(token: string, username: string, password: string) {
   if (!token || !username || !password) {
-    return res.status(400).json({ error: 'Token, username, and password are required' });
+    return jsonResponse({ error: 'Token, username, and password are required' }, 400);
   }
 
   if (password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+    return jsonResponse({ error: 'Password must be at least 6 characters long' }, 400);
   }
 
   try {
-    // Verify invitation token
     const decoded = jwt.verify(token, JWT_SECRET) as any;
     
     if (decoded.type !== 'invitation') {
-      return res.status(400).json({ error: 'Invalid invitation token' });
+      return jsonResponse({ error: 'Invalid invitation token' }, 400);
     }
 
-    // Find pending user
     const users = await sql`
       SELECT id, email, status, invitation_token
       FROM users 
@@ -316,12 +299,11 @@ async function handleCompleteInvitation(token: string, username: string, passwor
     `;
 
     if (users.length === 0) {
-      return res.status(400).json({ error: 'Invalid or expired invitation' });
+      return jsonResponse({ error: 'Invalid or expired invitation' }, 400);
     }
 
     const user = users[0];
 
-    // Check if username is available (excluding current user)
     const existingUsername = await sql`
       SELECT id FROM users 
       WHERE username = ${username} AND id != ${user.id}
@@ -329,10 +311,9 @@ async function handleCompleteInvitation(token: string, username: string, passwor
     `;
 
     if (existingUsername.length > 0) {
-      return res.status(400).json({ error: 'Username already taken' });
+      return jsonResponse({ error: 'Username already taken' }, 400);
     }
 
-    // Hash password and activate user
     const hashedPassword = await bcrypt.hash(password, 12);
 
     await sql`
@@ -344,30 +325,28 @@ async function handleCompleteInvitation(token: string, username: string, passwor
       WHERE id = ${user.id};
     `;
 
-    return res.status(200).json({
+    return jsonResponse({
       success: true,
       message: 'Account setup completed successfully'
     });
 
   } catch (error) {
-    return res.status(400).json({ error: 'Invalid or expired invitation token' });
+    return jsonResponse({ error: 'Invalid or expired invitation token' }, 400);
   }
 }
 
-async function handleVerifyInvitation(token: string, res: VercelResponse) {
+async function handleVerifyInvitation(token: string) {
   if (!token) {
-    return res.status(400).json({ error: 'Token is required' });
+    return jsonResponse({ error: 'Token is required' }, 400);
   }
 
   try {
-    // Verify invitation token
     const decoded = jwt.verify(token, JWT_SECRET) as any;
     
     if (decoded.type !== 'invitation') {
-      return res.status(400).json({ error: 'Invalid invitation token' });
+      return jsonResponse({ error: 'Invalid invitation token' }, 400);
     }
 
-    // Find user by email and check status
     const users = await sql`
       SELECT id, email, status, invitation_token
       FROM users 
@@ -376,25 +355,23 @@ async function handleVerifyInvitation(token: string, res: VercelResponse) {
     `;
 
     if (users.length === 0) {
-      return res.status(400).json({ error: 'Invitation not found' });
+      return jsonResponse({ error: 'Invitation not found' }, 400);
     }
 
     const user = users[0];
 
-    // Check if invitation is still pending
     if (user.status !== 'pending') {
-      return res.status(400).json({ 
+      return jsonResponse({ 
         error: 'This invitation is no longer valid. The user has already completed registration.',
         userAlreadyRegistered: true
-      });
+      }, 400);
     }
 
-    // Verify the invitation token matches
     if (user.invitation_token !== token) {
-      return res.status(400).json({ error: 'Invalid invitation token' });
+      return jsonResponse({ error: 'Invalid invitation token' }, 400);
     }
 
-    return res.status(200).json({
+    return jsonResponse({
       success: true,
       email: user.email,
       isPending: true,
@@ -402,19 +379,18 @@ async function handleVerifyInvitation(token: string, res: VercelResponse) {
     });
 
   } catch (error) {
-    return res.status(400).json({ error: 'Invalid or expired invitation token' });
+    return jsonResponse({ error: 'Invalid or expired invitation token' }, 400);
   }
 }
 
-async function handleVerifyToken(token: string, res: VercelResponse) {
+async function handleVerifyToken(token: string) {
   if (!token) {
-    return res.status(401).json({ error: 'Token is required' });
+    return jsonResponse({ error: 'Token is required' }, 401);
   }
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
     
-    // Get fresh user data from database
     const users = await sql`
       SELECT id, email, username, role, status, created_at, last_login, organization_id
       FROM users 
@@ -423,17 +399,15 @@ async function handleVerifyToken(token: string, res: VercelResponse) {
     `;
 
     if (users.length === 0) {
-      return res.status(401).json({ error: 'User not found' });
+      return jsonResponse({ error: 'User not found' }, 401);
     }
 
     const user = users[0];
 
-    // Check if user is active
     if (user.status !== 'active') {
-      return res.status(401).json({ error: 'Account not active' });
+      return jsonResponse({ error: 'Account not active' }, 401);
     }
 
-    // Get organization info if user belongs to one
     let organization = null;
     if (user.organization_id) {
       const orgs = await sql`
@@ -445,14 +419,14 @@ async function handleVerifyToken(token: string, res: VercelResponse) {
       organization = orgs[0] || null;
     }
 
-    return res.status(200).json({
+    return jsonResponse({
       success: true,
       user: user,
       organization: organization,
       message: 'Token is valid'
     });
-
+  
   } catch (error) {
-    return res.status(401).json({ error: 'Invalid or expired token' });
+    return jsonResponse({ error: 'Invalid or expired token' }, 401);
   }
-} 
+}

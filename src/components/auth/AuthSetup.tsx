@@ -1,3 +1,5 @@
+﻿"use client";
+
 import React, { useState, useEffect } from 'react';
 import { Shield, Eye, EyeOff, CheckCircle } from 'lucide-react';
 
@@ -134,12 +136,28 @@ const AuthSetup: React.FC<AuthSetupProps> = ({ onSetupComplete }) => {
                 <span>Users table</span>
               </div>
               <div className="flex items-center">
+                {setupStatus.organizationsTableExists ? (
+                  <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                ) : (
+                  <div className="h-4 w-4 rounded-full border-2 border-gray-300 mr-2" />
+                )}
+                <span>Organizations table</span>
+              </div>
+              <div className="flex items-center">
                 {setupStatus.matchesHasCreatedBy ? (
                   <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
                 ) : (
                   <div className="h-4 w-4 rounded-full border-2 border-gray-300 mr-2" />
                 )}
                 <span>Match ownership tracking</span>
+              </div>
+              <div className="flex items-center">
+                {setupStatus.settingsTableExists ? (
+                  <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                ) : (
+                  <div className="h-4 w-4 rounded-full border-2 border-gray-300 mr-2" />
+                )}
+                <span>Organization settings</span>
               </div>
             </div>
           </div>

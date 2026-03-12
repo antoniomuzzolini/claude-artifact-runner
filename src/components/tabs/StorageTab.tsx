@@ -1,5 +1,7 @@
-import React from 'react';
-import { Download, Upload, Cloud, Wifi, WifiOff, RefreshCw, Trash2 } from 'lucide-react';
+﻿"use client";
+
+import React, { useEffect, useState } from 'react';
+import { Download, Upload, Cloud, Wifi, WifiOff, RefreshCw, Trash2, AlertTriangle } from 'lucide-react';
 import { Player, Match } from '../../types/foosball';
 
 interface StorageTabProps {
@@ -9,6 +11,10 @@ interface StorageTabProps {
   isOnline: boolean;
   isSyncing: boolean;
   error: string | null;
+  minMatchesForRanking: number;
+  isSettingsLoading: boolean;
+  isSettingsSaving: boolean;
+  onUpdateMinMatchesForRanking: (value: number) => Promise<boolean>;
   onExportData: () => void;
   onImportData: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onResetAll: () => void;
@@ -24,6 +30,10 @@ const StorageTab: React.FC<StorageTabProps> = ({
   isOnline,
   isSyncing,
   error,
+  minMatchesForRanking,
+  isSettingsLoading,
+  isSettingsSaving,
+  onUpdateMinMatchesForRanking,
   onExportData,
   onImportData,
   onResetAll,
@@ -31,8 +41,69 @@ const StorageTab: React.FC<StorageTabProps> = ({
   onRecalculateELO,
   isSuperuser
 }) => {
+  const [minMatchesInput, setMinMatchesInput] = useState<string>(String(minMatchesForRanking));
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMinMatchesInput(String(minMatchesForRanking));
+  }, [minMatchesForRanking]);
+
+  const handleSaveMinMatches = async () => {
+    const parsed = Number.parseInt(minMatchesInput, 10);
+    if (Number.isNaN(parsed) || parsed < 0) {
+      setSettingsError('Please enter a valid non-negative number.');
+      return;
+    }
+    setSettingsError(null);
+    setSettingsMessage(null);
+    const success = await onUpdateMinMatchesForRanking(parsed);
+    if (!success) {
+      setSettingsError('Failed to save settings. Please try again.');
+      return;
+    }
+    setSettingsMessage('Settings saved.');
+  };
+
   return (
     <div className="space-y-6">
+      {/* Ranking Settings */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border dark:border-gray-700 shadow-sm">
+        <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Rankings Settings</h3>
+        <div className="flex flex-col gap-3">
+          <label className="text-sm text-gray-600 dark:text-gray-300">
+            Minimum matches required to appear in rankings
+          </label>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={minMatchesInput}
+              onChange={(e) => setMinMatchesInput(e.target.value)}
+              className="w-full sm:w-40 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              disabled={isSettingsLoading || isSettingsSaving}
+            />
+            <button
+              onClick={handleSaveMinMatches}
+              disabled={isSettingsLoading || isSettingsSaving}
+              className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors duration-200 disabled:bg-gray-400 dark:disabled:bg-gray-600"
+            >
+              {isSettingsSaving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+          {settingsError && (
+            <p className="text-sm text-red-600 dark:text-red-400">{settingsError}</p>
+          )}
+          {settingsMessage && (
+            <p className="text-sm text-green-600 dark:text-green-400">{settingsMessage}</p>
+          )}
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Players with fewer matches will be hidden from the rankings list.
+          </p>
+        </div>
+      </div>
+
       <div className="flex items-center gap-2 mb-6">
         <Cloud className="w-6 h-6 text-blue-500" />
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Data Management</h2>
@@ -80,7 +151,7 @@ const StorageTab: React.FC<StorageTabProps> = ({
                   ? 'text-blue-600 dark:text-blue-400' 
                   : 'text-green-600 dark:text-green-400'
             }`}>
-              {error ? '❌ Error' : isSyncing ? '🔄 Syncing...' : '✅ Ready'}
+              {error ? 'Error' : isSyncing ? 'Syncing...' : 'Ready'}
             </span>
           </div>
         </div>
@@ -100,10 +171,10 @@ const StorageTab: React.FC<StorageTabProps> = ({
                 : 'text-orange-700 dark:text-orange-300'
           }`}>
             {error 
-              ? `❌ ${error}` 
+              ? error 
               : isOnline 
-                ? '☁️ All data is automatically saved to cloud database' 
-                : '🔌 Connecting to cloud database...'
+                ? 'All data is automatically saved to cloud database' 
+                : 'Connecting to cloud database...'
             }
           </p>
           
@@ -170,7 +241,7 @@ const StorageTab: React.FC<StorageTabProps> = ({
           <div className="space-y-4">
             <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
               <div className="flex items-start gap-3">
-                <div className="text-orange-600 dark:text-orange-400 text-lg">⚠️</div>
+                <AlertTriangle className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                 <div>
                   <p className="text-sm font-medium text-orange-800 dark:text-orange-300 mb-1">
                     Recalculate ELO from scratch
