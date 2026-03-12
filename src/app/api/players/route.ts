@@ -74,14 +74,15 @@ export async function POST(req: NextRequest) {
 
     for (const player of playersData) {
       await sql`
-        INSERT INTO players (id, name, elo, matches, wins, losses, organization_id)
-        VALUES (${player.id}, ${player.name}, ${player.elo}, ${player.matches}, ${player.wins}, ${player.losses}, ${currentUser.organizationId})
+        INSERT INTO players (id, name, elo, matches, wins, losses, organization_id, season_id)
+        VALUES (${player.id}, ${player.name}, ${player.elo}, ${player.matches}, ${player.wins}, ${player.losses}, ${currentUser.organizationId}, ${player.season_id || null})
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
           elo = EXCLUDED.elo,
           matches = EXCLUDED.matches,
           wins = EXCLUDED.wins,
-          losses = EXCLUDED.losses
+          losses = EXCLUDED.losses,
+          season_id = EXCLUDED.season_id
         WHERE players.organization_id = ${currentUser.organizationId}
       `;
     }

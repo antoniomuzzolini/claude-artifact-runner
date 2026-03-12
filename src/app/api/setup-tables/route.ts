@@ -83,6 +83,8 @@ export async function POST() {
         matches INTEGER DEFAULT 0,
         wins INTEGER DEFAULT 0,
         losses INTEGER DEFAULT 0,
+        organization_id INTEGER,
+        season_id BIGINT,
         created_at TIMESTAMP DEFAULT NOW()
       );
     `;
@@ -98,6 +100,20 @@ export async function POST() {
         team1_score INTEGER NOT NULL,
         team2_score INTEGER NOT NULL,
         elo_changes JSONB,
+        organization_id INTEGER,
+        season_id BIGINT,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS seasons (
+        id BIGINT PRIMARY KEY,
+        organization_id INTEGER NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        start_date TIMESTAMP NOT NULL,
+        end_date TIMESTAMP,
+        is_current BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT NOW()
       );
     `;

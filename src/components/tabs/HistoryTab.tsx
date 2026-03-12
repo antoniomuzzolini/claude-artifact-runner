@@ -12,6 +12,7 @@ interface HistoryTabProps {
   filteredMatches: Match[];
   onDeleteMatch: (match: Match) => void;
   onPlayerStatsClick?: (playerName: string) => void;
+  canEditMatches?: boolean;
 }
 
 const HistoryTab: React.FC<HistoryTabProps> = ({
@@ -20,7 +21,8 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
   setMatchFilterPlayer,
   filteredMatches,
   onDeleteMatch,
-  onPlayerStatsClick
+  onPlayerStatsClick,
+  canEditMatches = true
 }) => {
   const { permissions, user } = useAuth();
 
@@ -211,7 +213,7 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
               </div>
 
               {/* Delete Button */}
-              {(permissions.canDeleteAnyMatch || (permissions.canDeleteOwnMatches && match.createdBy === user?.id)) && (
+              {canEditMatches && (permissions.canDeleteAnyMatch || (permissions.canDeleteOwnMatches && match.createdBy === user?.id)) && (
                 <div className="px-4 pb-4">
                   <button
                     onClick={() => onDeleteMatch(match)}

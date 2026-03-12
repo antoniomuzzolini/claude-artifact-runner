@@ -11,10 +11,11 @@ export const findOrCreatePlayer = (
   name: string, 
   players: Player[], 
   setPlayers: React.Dispatch<React.SetStateAction<Player[]>>,
-  organizationId: number
+  organizationId: number,
+  seasonId: number
 ): Player => {
   const existingPlayer = players.find(
-    p => p.name.toLowerCase() === name.toLowerCase()
+    p => p.name.toLowerCase() === name.toLowerCase() && p.season_id === seasonId
   );
   
   if (existingPlayer) {
@@ -28,7 +29,8 @@ export const findOrCreatePlayer = (
     matches: 0,
     wins: 0,
     losses: 0,
-    organization_id: organizationId
+    organization_id: organizationId,
+    season_id: seasonId
   };
   
   setPlayers(prev => [...prev, newPlayer]);

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Download, Upload, Cloud, Wifi, WifiOff, RefreshCw, Trash2, AlertTriangle } from 'lucide-react';
-import { Player, Match } from '../../types/foosball';
+import { Player, Match, Season } from '../../types/foosball';
 
 interface StorageTabProps {
   players: Player[];
@@ -15,6 +15,9 @@ interface StorageTabProps {
   isSettingsLoading: boolean;
   isSettingsSaving: boolean;
   onUpdateMinMatchesForRanking: (value: number) => Promise<boolean>;
+  currentSeason?: Season | null;
+  onUpdateCurrentSeasonName?: (name: string) => Promise<boolean>;
+  isSeasonSaving?: boolean;
   onExportData: () => void;
   onImportData: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onResetAll: () => void;
@@ -34,6 +37,9 @@ const StorageTab: React.FC<StorageTabProps> = ({
   isSettingsLoading,
   isSettingsSaving,
   onUpdateMinMatchesForRanking,
+  currentSeason,
+  onUpdateCurrentSeasonName,
+  isSeasonSaving = false,
   onExportData,
   onImportData,
   onResetAll,
@@ -44,10 +50,17 @@ const StorageTab: React.FC<StorageTabProps> = ({
   const [minMatchesInput, setMinMatchesInput] = useState<string>(String(minMatchesForRanking));
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
+  const [seasonNameInput, setSeasonNameInput] = useState<string>(currentSeason?.name || '');
+  const [seasonMessage, setSeasonMessage] = useState<string | null>(null);
+  const [seasonError, setSeasonError] = useState<string | null>(null);
 
   useEffect(() => {
     setMinMatchesInput(String(minMatchesForRanking));
   }, [minMatchesForRanking]);
+
+  useEffect(() => {
+    setSeasonNameInput(currentSeason?.name || '');
+  }, [currentSeason?.name]);
 
   const handleSaveMinMatches = async () => {
     const parsed = Number.parseInt(minMatchesInput, 10);
@@ -65,8 +78,59 @@ const StorageTab: React.FC<StorageTabProps> = ({
     setSettingsMessage('Settings saved.');
   };
 
+  const handleSaveSeasonName = async () => {
+    if (!onUpdateCurrentSeasonName) return;
+    const trimmed = seasonNameInput.trim();
+    if (!trimmed) {
+      setSeasonError('Please enter a season name.');
+      setSeasonMessage(null);
+      return;
+    }
+    setSeasonError(null);
+    setSeasonMessage(null);
+    const success = await onUpdateCurrentSeasonName(trimmed);
+    if (!success) {
+      setSeasonError('Failed to update season name. Please try again.');
+      return;
+    }
+    setSeasonMessage('Season name updated.');
+  };
+
   return (
     <div className="space-y-6">
+      {isSuperuser && currentSeason && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border dark:border-gray-700 shadow-sm">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Season Settings</h3>
+          <div className="flex flex-col gap-3">
+            <label className="text-sm text-gray-600 dark:text-gray-300">
+              Current season name
+            </label>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <input
+                type="text"
+                value={seasonNameInput}
+                onChange={(e) => setSeasonNameInput(e.target.value)}
+                className="w-full sm:w-80 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                disabled={isSeasonSaving}
+              />
+              <button
+                onClick={handleSaveSeasonName}
+                disabled={isSeasonSaving}
+                className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors duration-200 disabled:bg-gray-400 dark:disabled:bg-gray-600"
+              >
+                {isSeasonSaving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+            {seasonError && (
+              <p className="text-sm text-red-600 dark:text-red-400">{seasonError}</p>
+            )}
+            {seasonMessage && (
+              <p className="text-sm text-green-600 dark:text-green-400">{seasonMessage}</p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Ranking Settings */}
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border dark:border-gray-700 shadow-sm">
         <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Rankings Settings</h3>

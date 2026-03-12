@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import React, { useState, useEffect } from 'react';
-import { Trophy, PlusCircle, BarChart3, Settings } from 'lucide-react';
+import { Trophy, PlusCircle, BarChart3, Settings, Calendar, ChevronDown } from 'lucide-react';
 
 // Import types
 import { Match, NewMatch, AppData, Player } from '../types/foosball';
@@ -24,6 +24,7 @@ import RankingsTab from '../components/tabs/RankingsTab';
 import NewMatchTab from '../components/tabs/NewMatchTab';
 import HistoryTab from '../components/tabs/HistoryTab';
 import StorageTab from '../components/tabs/StorageTab';
+import SeasonsTab from '../components/tabs/SeasonsTab';
 import UserMenu from '../components/auth/UserMenu';
 import AuthWrapper from '../components/auth/AuthWrapper';
 import PlayerStatsModal from '../components/PlayerStatsModal';
@@ -33,7 +34,7 @@ const ChampionshipManager = () => {
   useTheme();
   
   // Use authentication context
-  const { user, organization } = useAuth();
+  const { user, organization, makeAuthenticatedRequest } = useAuth();
   const {
     minMatchesForRanking,
     isLoading: isSettingsLoading,
@@ -45,6 +46,8 @@ const ChampionshipManager = () => {
   const {
     players,
     matches,
+    seasons,
+    currentSeasonId,
     lastSaved,
     isOnline,
     isSyncing,
@@ -65,12 +68,36 @@ const ChampionshipManager = () => {
     team1Score: 0,
     team2Score: 0
   });
-  const [activeTab, setActiveTab] = useState<'rankings' | 'new-match' | 'history' | 'storage'>('rankings');
+  const [activeTab, setActiveTab] = useState<'rankings' | 'new-match' | 'history' | 'seasons' | 'storage'>('rankings');
   const [matchFilterPlayer, setMatchFilterPlayer] = useState<string>('');
+  const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null);
+  const [isSeasonSaving, setIsSeasonSaving] = useState(false);
+  const [isSeasonCreating, setIsSeasonCreating] = useState(false);
   
   // Player stats modal state
   const [selectedPlayerForStats, setSelectedPlayerForStats] = useState<Player | null>(null);
   const [isPlayerStatsModalOpen, setIsPlayerStatsModalOpen] = useState(false);
+
+  const effectiveSeasonId = selectedSeasonId ?? currentSeasonId;
+  const selectedSeasonPlayers = effectiveSeasonId
+    ? players.filter(player => player.season_id === effectiveSeasonId)
+    : [];
+  const selectedSeasonMatches = effectiveSeasonId
+    ? matches.filter(match => match.season_id === effectiveSeasonId)
+    : [];
+  const currentSeasonPlayers = currentSeasonId
+    ? players.filter(player => player.season_id === currentSeasonId)
+    : [];
+  const currentSeasonMatches = currentSeasonId
+    ? matches.filter(match => match.season_id === currentSeasonId)
+    : [];
+  const isViewingCurrentSeason = !!currentSeasonId && effectiveSeasonId === currentSeasonId;
+  const currentSeason = seasons.find(season => season.id === currentSeasonId) || null;
+  const seasonOptions = [...seasons].sort((a, b) => {
+    const aTime = new Date(a.startDate).getTime();
+    const bTime = new Date(b.startDate).getTime();
+    return bTime - aTime;
+  });
 
   // Handle file import
   const handleImportFile = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -111,6 +138,11 @@ const ChampionshipManager = () => {
       return;
     }
 
+    if (!currentSeasonId || !isViewingCurrentSeason) {
+      alert('You can only add matches to the current season.');
+      return;
+    }
+
     if (!validateMatch(
       newMatch.team1,
       newMatch.team2,
@@ -123,10 +155,10 @@ const ChampionshipManager = () => {
 
     // Find or create all players
     const team1Players = newMatch.team1.map(name => 
-      findOrCreatePlayer(name, players, setPlayers, organization.id)
+      findOrCreatePlayer(name, currentSeasonPlayers, setPlayers, organization.id, currentSeasonId)
     );
     const team2Players = newMatch.team2.map(name => 
-      findOrCreatePlayer(name, players, setPlayers, organization.id)
+      findOrCreatePlayer(name, currentSeasonPlayers, setPlayers, organization.id, currentSeasonId)
     );
 
     // Get total points for the match
@@ -199,7 +231,8 @@ const ChampionshipManager = () => {
         ...team2EloChanges
       },
       createdBy: user?.id,
-      organization_id: organization.id
+      organization_id: organization.id,
+      season_id: currentSeasonId
     };
 
     setMatches(prev => [match, ...prev]);
@@ -217,11 +250,11 @@ const ChampionshipManager = () => {
 
   // Filter matches by player
   const filteredMatches = matchFilterPlayer 
-    ? matches.filter(match => 
+    ? selectedSeasonMatches.filter(match => 
         match.team1.includes(matchFilterPlayer) || 
         match.team2.includes(matchFilterPlayer)
       )
-    : matches;
+    : selectedSeasonMatches;
 
   // Handle player click from rankings
   const handlePlayerClick = (playerName: string) => {
@@ -231,7 +264,7 @@ const ChampionshipManager = () => {
 
   // Handle opening player stats modal
   const handlePlayerStatsClick = (playerName: string) => {
-    const player = players.find(p => p.name === playerName);
+    const player = selectedSeasonPlayers.find(p => p.name === playerName);
     if (player) {
       setSelectedPlayerForStats(player);
       setIsPlayerStatsModalOpen(true);
@@ -244,8 +277,28 @@ const ChampionshipManager = () => {
     setSelectedPlayerForStats(null);
   };
 
+  // Ensure a season is selected once seasons load
+  useEffect(() => {
+    if (!currentSeasonId) return;
+    const hasSelected = selectedSeasonId && seasons.some(season => season.id === selectedSeasonId);
+    if (!hasSelected) {
+      setSelectedSeasonId(currentSeasonId);
+    }
+  }, [currentSeasonId, seasons, selectedSeasonId]);
+
+  // Reset filters when switching seasons
+  useEffect(() => {
+    setMatchFilterPlayer('');
+    setIsPlayerStatsModalOpen(false);
+    setSelectedPlayerForStats(null);
+  }, [selectedSeasonId]);
+
   // Handle match deletion
   const handleDeleteMatch = async (match: Match) => {
+    if (!isViewingCurrentSeason) {
+      alert('Past seasons are read-only. You cannot delete matches.');
+      return;
+    }
     const confirmMessage = `Are you sure you want to delete this match?\n\nDate: ${match.date} ${match.time}\nTeams: ${match.team1.join(', ')} vs ${match.team2.join(', ')}\nScore: ${match.team1Score} - ${match.team2Score}`;
     
     if (window.confirm(confirmMessage)) {
@@ -257,6 +310,72 @@ const ChampionshipManager = () => {
     }
   };
 
+  const handleSelectSeason = (seasonId: number) => {
+    setSelectedSeasonId(seasonId);
+  };
+
+  const handleCreateSeason = async () => {
+    if (!makeAuthenticatedRequest) return;
+    if (user?.role !== 'superuser') {
+      alert('Only administrators can create new seasons.');
+      return;
+    }
+    if (!window.confirm('Create a new season? This will close the current season and reset rankings.')) {
+      return;
+    }
+
+    setIsSeasonCreating(true);
+    try {
+      const response = await makeAuthenticatedRequest('/api/seasons', {
+        method: 'POST',
+        body: JSON.stringify({})
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        alert(data.error || 'Failed to create season.');
+        return;
+      }
+
+      const data = await response.json().catch(() => ({}));
+      if (typeof data.currentSeasonId === 'number') {
+        setSelectedSeasonId(data.currentSeasonId);
+      }
+      await refreshData();
+      setActiveTab('rankings');
+    } catch (error) {
+      console.error('Create season error:', error);
+      alert('Failed to create season. Please try again.');
+    } finally {
+      setIsSeasonCreating(false);
+    }
+  };
+
+  const handleUpdateCurrentSeasonName = async (name: string) => {
+    if (!makeAuthenticatedRequest) return false;
+    if (!currentSeasonId) return false;
+
+    setIsSeasonSaving(true);
+    try {
+      const response = await makeAuthenticatedRequest('/api/seasons', {
+        method: 'PATCH',
+        body: JSON.stringify({ seasonId: currentSeasonId, name })
+      });
+
+      if (!response.ok) {
+        return false;
+      }
+
+      await refreshData();
+      return true;
+    } catch (error) {
+      console.error('Update season error:', error);
+      return false;
+    } finally {
+      setIsSeasonSaving(false);
+    }
+  };
+
   // Update document title with organization name
   useEffect(() => {
     document.title = organization?.name || 'Championship Manager';
@@ -264,11 +383,19 @@ const ChampionshipManager = () => {
 
   // Recalculate ELO from scratch (superuser only)
   const recalculateELO = async () => {
-    if (!organization) return;
+    if (!organization || !currentSeasonId) return;
 
     try {
-      // Create a copy of all players and reset their ELO to 1200
-      const resetPlayers = players.map(player => ({
+      const seasonPlayers = currentSeasonPlayers;
+      const seasonMatches = currentSeasonMatches;
+
+      if (seasonPlayers.length === 0 || seasonMatches.length === 0) {
+        alert('No matches available to recalculate for the current season.');
+        return;
+      }
+
+      // Create a copy of season players and reset their ELO to 1200
+      const resetPlayers = seasonPlayers.map(player => ({
         ...player,
         elo: 1200,
         matches: 0,
@@ -277,7 +404,7 @@ const ChampionshipManager = () => {
       }));
 
       // Sort matches by date and time chronologically
-      const sortedMatches = [...matches].sort((a, b) => {
+      const sortedMatches = [...seasonMatches].sort((a, b) => {
         const dateA = new Date(`${a.date} ${a.time}`);
         const dateB = new Date(`${b.date} ${b.time}`);
         return dateA.getTime() - dateB.getTime();
@@ -364,9 +491,18 @@ const ChampionshipManager = () => {
         updatedMatches.push(updatedMatch);
       }
 
-      // Update state with recalculated data
-      setPlayers(currentPlayers);
-      setMatches(updatedMatches);
+      const updatedPlayersById = new Map(currentPlayers.map(player => [player.id, player]));
+      const updatedMatchesById = new Map(updatedMatches.map(match => [match.id, match]));
+
+      // Update state with recalculated data (current season only)
+      setPlayers(prev => prev.map(player => {
+        if (player.season_id !== currentSeasonId) return player;
+        return updatedPlayersById.get(player.id) || player;
+      }));
+      setMatches(prev => prev.map(match => {
+        if (match.season_id !== currentSeasonId) return match;
+        return updatedMatchesById.get(match.id) || match;
+      }));
 
       alert(`ELO recalculation complete! Processed ${updatedMatches.length} matches.`);
     } catch (error) {
@@ -381,9 +517,36 @@ const ChampionshipManager = () => {
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              {organization?.name || 'Championship Manager'}
-            </h1>
+            <div className="flex flex-wrap items-center gap-4">
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                {organization?.name || 'Championship Manager'}
+              </h1>
+              <div className="relative">
+                <select
+                  value={effectiveSeasonId ?? ''}
+                  onChange={(e) => {
+                    if (!e.target.value) return;
+                    handleSelectSeason(Number(e.target.value));
+                  }}
+                  className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200 pr-8"
+                >
+                  {seasonOptions.length === 0 && (
+                    <option value="">Loading...</option>
+                  )}
+                  {seasonOptions.map(season => (
+                    <option key={season.id} value={season.id}>
+                      {season.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+              </div>
+              {!isViewingCurrentSeason && (
+                <span className="text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 px-2 py-1 rounded-full">
+                  Read-only season
+                </span>
+              )}
+            </div>
             <p className="text-gray-600 dark:text-gray-400 mt-1">Manage your championship tracking</p>
           </div>
           <UserMenu />
@@ -396,11 +559,12 @@ const ChampionshipManager = () => {
               { id: 'rankings', name: 'Rankings', Icon: Trophy },
               { id: 'new-match', name: 'New Match', Icon: PlusCircle },
               { id: 'history', name: 'History', Icon: BarChart3 },
+              { id: 'seasons', name: 'Seasons', Icon: Calendar },
               ...(user?.role === 'superuser' ? [{ id: 'storage', name: 'Settings', Icon: Settings }] : []),
             ].map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as 'rankings' | 'new-match' | 'history' | 'storage')}
+                onClick={() => setActiveTab(tab.id as 'rankings' | 'new-match' | 'history' | 'seasons' | 'storage')}
                 className={`${
                   activeTab === tab.id
                     ? 'border-blue-500 text-blue-600 dark:text-blue-400'
@@ -458,7 +622,7 @@ const ChampionshipManager = () => {
           <div className="p-6">
             {activeTab === 'rankings' && (
               <RankingsTab 
-                players={players} 
+                players={selectedSeasonPlayers} 
                 minMatchesForRanking={minMatchesForRanking}
                 onPlayerClick={handlePlayerClick}
                 onPlayerStatsClick={handlePlayerStatsClick}
@@ -475,10 +639,12 @@ const ChampionshipManager = () => {
                   </div>
                 ) : (
                   <NewMatchTab
-                    players={players}
+                    players={selectedSeasonPlayers}
                     newMatch={newMatch}
                     setNewMatch={setNewMatch}
                     onAddMatch={addMatch}
+                    isReadOnly={!isViewingCurrentSeason}
+                    readOnlyMessage="You are viewing a past season. Matches are read-only."
                   />
                 )}
               </>
@@ -486,11 +652,25 @@ const ChampionshipManager = () => {
             {activeTab === 'history' && (
               <HistoryTab
                 filteredMatches={filteredMatches}
-                players={players}
+                players={selectedSeasonPlayers}
                 matchFilterPlayer={matchFilterPlayer}
                 setMatchFilterPlayer={setMatchFilterPlayer}
                 onDeleteMatch={handleDeleteMatch}
                 onPlayerStatsClick={handlePlayerStatsClick}
+                canEditMatches={isViewingCurrentSeason}
+              />
+            )}
+            {activeTab === 'seasons' && (
+              <SeasonsTab
+                seasons={seasons}
+                players={players}
+                minMatchesForRanking={minMatchesForRanking}
+                currentSeasonId={currentSeasonId}
+                selectedSeasonId={effectiveSeasonId}
+                onSelectSeason={handleSelectSeason}
+                onCreateSeason={handleCreateSeason}
+                canCreateSeason={user?.role === 'superuser'}
+                isCreating={isSeasonCreating}
               />
             )}
             {activeTab === 'storage' && user?.role === 'superuser' && (
@@ -505,6 +685,9 @@ const ChampionshipManager = () => {
                 isSettingsLoading={isSettingsLoading}
                 isSettingsSaving={isSettingsSaving}
                 onUpdateMinMatchesForRanking={updateMinMatchesForRanking}
+                currentSeason={currentSeason}
+                onUpdateCurrentSeasonName={handleUpdateCurrentSeasonName}
+                isSeasonSaving={isSeasonSaving}
                 onExportData={exportDataToFile}
                 onImportData={handleImportFile}
                 onResetAll={resetAll}
@@ -519,7 +702,7 @@ const ChampionshipManager = () => {
         {/* Player Stats Modal */}
         <PlayerStatsModal
           player={selectedPlayerForStats}
-          matches={matches}
+          matches={selectedSeasonMatches}
           isOpen={isPlayerStatsModalOpen}
           onClose={closePlayerStatsModal}
         />

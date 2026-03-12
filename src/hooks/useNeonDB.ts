@@ -1,13 +1,15 @@
 ﻿"use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { AppData, Player, Match } from '../types/foosball';
+import { AppData, Player, Match, Season } from '../types/foosball';
 import { useAuth } from './useAuth';
 
 export const useNeonDB = () => {
   const { makeAuthenticatedRequest, isAuthenticated } = useAuth();
   const [players, setPlayers] = useState<Player[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [currentSeasonId, setCurrentSeasonId] = useState<number | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
@@ -33,7 +35,9 @@ export const useNeonDB = () => {
         method: 'POST',
         body: JSON.stringify({
           players,
-          matches
+          matches,
+          seasons,
+          currentSeasonId
         }),
       });
 
@@ -53,7 +57,7 @@ export const useNeonDB = () => {
     } finally {
       setIsSyncing(false);
     }
-  }, [players, matches, isOnline, isAuthenticated, makeAuthenticatedRequest]);
+  }, [players, matches, seasons, currentSeasonId, isOnline, isAuthenticated, makeAuthenticatedRequest]);
 
   // Load data directly from cloud database
   const loadData = useCallback(async () => {
@@ -74,14 +78,49 @@ export const useNeonDB = () => {
         const cloudData = await response.json();
         
         if (cloudData) {
-          setPlayers(cloudData.players || []);
-          setMatches(cloudData.matches || []);
+          const parsedSeasonId = Number(cloudData.currentSeasonId);
+          const resolvedSeasonId = Number.isFinite(parsedSeasonId) ? parsedSeasonId : null;
+          const rawPlayers = Array.isArray(cloudData.players) ? cloudData.players : [];
+          const rawMatches = Array.isArray(cloudData.matches) ? cloudData.matches : [];
+          const rawSeasons = Array.isArray(cloudData.seasons) ? cloudData.seasons : [];
+
+          setPlayers(
+            rawPlayers.map(player => {
+              const parsedPlayerSeason = Number(player.season_id);
+              return {
+                ...player,
+                season_id: Number.isFinite(parsedPlayerSeason)
+                  ? parsedPlayerSeason
+                  : (resolvedSeasonId ?? player.season_id)
+              };
+            })
+          );
+          setMatches(
+            rawMatches.map(match => {
+              const parsedMatchSeason = Number(match.season_id);
+              return {
+                ...match,
+                season_id: Number.isFinite(parsedMatchSeason)
+                  ? parsedMatchSeason
+                  : (resolvedSeasonId ?? match.season_id)
+              };
+            })
+          );
+          setSeasons(
+            rawSeasons.map(season => ({
+              ...season,
+              id: Number(season.id)
+            }))
+          );
+          setCurrentSeasonId(resolvedSeasonId);
           setLastSaved(cloudData.lastSaved ? new Date(cloudData.lastSaved) : null);
           console.log('â˜ï¸ Data loaded from Neon DB');
         } else {
           // No data in database yet - start fresh
           setPlayers([]);
           setMatches([]);
+          setSeasons([]);
+          setCurrentSeasonId(null);
           setLastSaved(null);
           console.log('ðŸ“Š No data found - starting fresh');
         }
@@ -105,6 +144,8 @@ export const useNeonDB = () => {
       const data: AppData = {
         players,
         matches,
+        seasons,
+        currentSeasonId,
         lastSaved: new Date().toISOString(),
         version: '1.0'
       };
@@ -143,8 +184,41 @@ export const useNeonDB = () => {
     
     try {
       // Update local state
-      setPlayers(data.players);
-      setMatches(data.matches);
+      const parsedSeasonId = Number(data.currentSeasonId);
+      const resolvedSeasonId = Number.isFinite(parsedSeasonId) ? parsedSeasonId : null;
+      const rawPlayers = Array.isArray(data.players) ? data.players : [];
+      const rawMatches = Array.isArray(data.matches) ? data.matches : [];
+      const rawSeasons = Array.isArray(data.seasons) ? data.seasons : [];
+
+      setPlayers(
+        rawPlayers.map(player => {
+          const parsedPlayerSeason = Number(player.season_id);
+          return {
+            ...player,
+            season_id: Number.isFinite(parsedPlayerSeason)
+              ? parsedPlayerSeason
+              : (resolvedSeasonId ?? player.season_id)
+          };
+        })
+      );
+      setMatches(
+        rawMatches.map(match => {
+          const parsedMatchSeason = Number(match.season_id);
+          return {
+            ...match,
+            season_id: Number.isFinite(parsedMatchSeason)
+              ? parsedMatchSeason
+              : (resolvedSeasonId ?? match.season_id)
+          };
+        })
+      );
+      setSeasons(
+        rawSeasons.map(season => ({
+          ...season,
+          id: Number(season.id)
+        }))
+      );
+      setCurrentSeasonId(resolvedSeasonId);
       setLastSaved(new Date());
       
       // Save to cloud database
@@ -152,12 +226,15 @@ export const useNeonDB = () => {
         method: 'POST',
         body: JSON.stringify({
           players: data.players,
-          matches: data.matches
+          matches: data.matches,
+          seasons: data.seasons || [],
+          currentSeasonId: Number.isFinite(Number(data.currentSeasonId)) ? Number(data.currentSeasonId) : null
         }),
       });
       
       if (response.ok) {
         console.log('âœ… Data imported and saved to Neon DB');
+        await loadData();
       } else {
         const errorData = await response.json();
         setError(errorData.error || 'Failed to save imported data to database');
@@ -303,12 +380,16 @@ export const useNeonDB = () => {
   return {
     players,
     matches,
+    seasons,
+    currentSeasonId,
     lastSaved,
     isOnline,
     isSyncing,
     error,
     setPlayers,
     setMatches,
+    setSeasons,
+    setCurrentSeasonId,
     exportDataToFile,
     importDataFromFile,
     resetAll,

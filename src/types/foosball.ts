@@ -16,6 +16,7 @@ export interface Player {
   wins: number;
   losses: number;
   organization_id: number;
+  season_id: number;
 }
 
 export interface Match {
@@ -30,6 +31,7 @@ export interface Match {
   eloChanges: { [playerName: string]: number };
   createdBy?: number; // User ID who created the match
   organization_id: number;
+  season_id: number;
 }
 
 export interface NewMatch {
@@ -39,9 +41,20 @@ export interface NewMatch {
   team2Score: number;
 }
 
+export interface Season {
+  id: number;
+  name: string;
+  startDate: string;
+  endDate?: string | null;
+  organization_id: number;
+  isCurrent?: boolean;
+}
+
 export interface AppData {
   players: Player[];
   matches: Match[];
+  seasons?: Season[];
+  currentSeasonId?: number | null;
   lastSaved: string;
   version?: string;
   exportDate?: string;

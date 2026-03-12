@@ -40,10 +40,86 @@ function getCurrentUser(req: NextRequest) {
   }
 }
 
+async function ensureSeasonsSchema() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS seasons (
+      id BIGINT PRIMARY KEY,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      name VARCHAR(255) NOT NULL,
+      start_date TIMESTAMP NOT NULL,
+      end_date TIMESTAMP,
+      is_current BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `;
+
+  await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS season_id BIGINT;`;
+  await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS season_id BIGINT;`;
+}
+
+async function ensureCurrentSeason(organizationId: number) {
+  await ensureSeasonsSchema();
+
+  const currentRows = await sql`
+    SELECT * FROM seasons 
+    WHERE organization_id = ${organizationId} AND is_current = TRUE
+    LIMIT 1
+  `;
+
+  if (currentRows.length > 0) {
+    return currentRows[0];
+  }
+
+  const existingRows = await sql`
+    SELECT * FROM seasons
+    WHERE organization_id = ${organizationId}
+    ORDER BY start_date DESC
+    LIMIT 1
+  `;
+
+  if (existingRows.length > 0) {
+    await sql`
+      UPDATE seasons
+      SET is_current = TRUE
+      WHERE id = ${existingRows[0].id}
+    `;
+    return existingRows[0];
+  }
+
+  const now = new Date().toISOString();
+  const newId = Date.now();
+  const created = await sql`
+    INSERT INTO seasons (id, organization_id, name, start_date, is_current)
+    VALUES (${newId}, ${organizationId}, ${'Season 1'}, ${now}, TRUE)
+    RETURNING *
+  `;
+
+  return created[0];
+}
+
+async function backfillSeasonIds(organizationId: number, seasonId: number) {
+  await Promise.all([
+    sql`
+      UPDATE players
+      SET season_id = ${seasonId}
+      WHERE organization_id = ${organizationId} AND season_id IS NULL
+    `,
+    sql`
+      UPDATE matches
+      SET season_id = ${seasonId}
+      WHERE organization_id = ${organizationId} AND season_id IS NULL
+    `
+  ]);
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { currentUser, error } = getCurrentUser(req);
     if (error) return error;
+
+    const currentSeason = await ensureCurrentSeason(currentUser.organizationId);
+    const resolvedCurrentSeasonId = Number(currentSeason.id);
+    await backfillSeasonIds(currentUser.organizationId, resolvedCurrentSeasonId);
 
     const [players, matches] = await Promise.all([
       sql`
@@ -66,9 +142,26 @@ export async function GET(req: NextRequest) {
       createdBy: match.created_by
     }));
 
+    const seasons = await sql`
+      SELECT * FROM seasons
+      WHERE organization_id = ${currentUser.organizationId}
+      ORDER BY start_date DESC
+    `;
+
+    const transformedSeasons = seasons.map(season => ({
+      id: Number(season.id),
+      name: season.name,
+      startDate: season.start_date?.toISOString ? season.start_date.toISOString() : season.start_date,
+      endDate: season.end_date?.toISOString ? season.end_date.toISOString() : season.end_date,
+      organization_id: season.organization_id,
+      isCurrent: season.is_current
+    }));
+
     return jsonResponse({
       players,
       matches: transformedMatches,
+      seasons: transformedSeasons,
+      currentSeasonId: Number.isFinite(resolvedCurrentSeasonId) ? resolvedCurrentSeasonId : null,
       lastSaved: new Date().toISOString()
     });
   } catch (error) {
@@ -83,23 +176,68 @@ export async function POST(req: NextRequest) {
     const { currentUser, error } = getCurrentUser(req);
     if (error) return error;
 
-    const { players: playersData, matches: matchesData } = await req.json();
+    const { players: playersData, matches: matchesData, seasons: seasonsData, currentSeasonId } = await req.json();
 
     if (!playersData || !matchesData) {
       return jsonResponse({ error: 'Invalid data format' }, 400);
     }
 
+    const currentSeason = await ensureCurrentSeason(currentUser.organizationId);
+    const resolvedCurrentSeasonId = Number(currentSeason.id);
+    const parsedSeasonId = Number(currentSeasonId);
+    const effectiveSeasonId = Number.isFinite(parsedSeasonId) ? parsedSeasonId : resolvedCurrentSeasonId;
+
+    if (Array.isArray(seasonsData) && seasonsData.length > 0) {
+      for (const season of seasonsData) {
+        await sql`
+          INSERT INTO seasons (id, organization_id, name, start_date, end_date, is_current)
+          VALUES (
+            ${season.id},
+            ${currentUser.organizationId},
+            ${season.name},
+            ${season.startDate || new Date().toISOString()},
+            ${season.endDate || null},
+            ${season.isCurrent || false}
+          )
+          ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name,
+            start_date = EXCLUDED.start_date,
+            end_date = EXCLUDED.end_date,
+            is_current = EXCLUDED.is_current
+          WHERE seasons.organization_id = ${currentUser.organizationId}
+        `;
+      }
+    }
+
+    if (typeof effectiveSeasonId === 'number') {
+      await sql`
+        UPDATE seasons
+        SET is_current = (id = ${effectiveSeasonId})
+        WHERE organization_id = ${currentUser.organizationId}
+      `;
+    }
+
     if (Array.isArray(playersData)) {
       for (const player of playersData) {
         await sql`
-          INSERT INTO players (id, name, elo, matches, wins, losses, organization_id)
-          VALUES (${player.id}, ${player.name}, ${player.elo}, ${player.matches}, ${player.wins}, ${player.losses}, ${currentUser.organizationId})
+          INSERT INTO players (id, name, elo, matches, wins, losses, organization_id, season_id)
+          VALUES (
+            ${player.id},
+            ${player.name},
+            ${player.elo},
+            ${player.matches},
+            ${player.wins},
+            ${player.losses},
+            ${currentUser.organizationId},
+            ${player.season_id || effectiveSeasonId}
+          )
           ON CONFLICT (id) DO UPDATE SET
             name = EXCLUDED.name,
             elo = EXCLUDED.elo,
             matches = EXCLUDED.matches,
             wins = EXCLUDED.wins,
-            losses = EXCLUDED.losses
+            losses = EXCLUDED.losses,
+            season_id = EXCLUDED.season_id
           WHERE players.organization_id = ${currentUser.organizationId}
         `;
       }
@@ -108,8 +246,21 @@ export async function POST(req: NextRequest) {
     if (Array.isArray(matchesData)) {
       for (const match of matchesData) {
         await sql`
-          INSERT INTO matches (id, date, time, team1, team2, winner, team1_score, team2_score, elo_changes, created_by, organization_id)
-          VALUES (${match.id}, ${match.date}, ${match.time}, ${match.team1}, ${match.team2}, ${match.winner}, ${match.team1Score}, ${match.team2Score}, ${JSON.stringify(match.eloChanges)}, ${match.createdBy || currentUser.userId}, ${currentUser.organizationId})
+          INSERT INTO matches (id, date, time, team1, team2, winner, team1_score, team2_score, elo_changes, created_by, organization_id, season_id)
+          VALUES (
+            ${match.id},
+            ${match.date},
+            ${match.time},
+            ${match.team1},
+            ${match.team2},
+            ${match.winner},
+            ${match.team1Score},
+            ${match.team2Score},
+            ${JSON.stringify(match.eloChanges)},
+            ${match.createdBy || currentUser.userId},
+            ${currentUser.organizationId},
+            ${match.season_id || effectiveSeasonId}
+          )
           ON CONFLICT (id) DO UPDATE SET
             date = EXCLUDED.date,
             time = EXCLUDED.time,
@@ -119,7 +270,8 @@ export async function POST(req: NextRequest) {
             team1_score = EXCLUDED.team1_score,
             team2_score = EXCLUDED.team2_score,
             elo_changes = EXCLUDED.elo_changes,
-            created_by = EXCLUDED.created_by
+            created_by = EXCLUDED.created_by,
+            season_id = EXCLUDED.season_id
           WHERE matches.organization_id = ${currentUser.organizationId}
         `;
       }

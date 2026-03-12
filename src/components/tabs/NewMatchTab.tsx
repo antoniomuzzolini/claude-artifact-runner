@@ -10,15 +10,20 @@ interface NewMatchTabProps {
   newMatch: NewMatch;
   setNewMatch: React.Dispatch<React.SetStateAction<NewMatch>>;
   onAddMatch: () => void;
+  isReadOnly?: boolean;
+  readOnlyMessage?: string;
 }
 
 const NewMatchTab: React.FC<NewMatchTabProps> = ({
   players,
   newMatch,
   setNewMatch,
-  onAddMatch
+  onAddMatch,
+  isReadOnly = false,
+  readOnlyMessage
 }) => {
   const addPlayerToTeam = (teamNumber: 1 | 2) => {
+    if (isReadOnly) return;
     const teamKey = teamNumber === 1 ? 'team1' : 'team2';
     setNewMatch(prev => ({
       ...prev,
@@ -27,6 +32,7 @@ const NewMatchTab: React.FC<NewMatchTabProps> = ({
   };
 
   const removePlayerFromTeam = (teamNumber: 1 | 2, playerIndex: number) => {
+    if (isReadOnly) return;
     const teamKey = teamNumber === 1 ? 'team1' : 'team2';
     setNewMatch(prev => ({
       ...prev,
@@ -35,6 +41,7 @@ const NewMatchTab: React.FC<NewMatchTabProps> = ({
   };
 
   const updatePlayerInTeam = (teamNumber: 1 | 2, playerIndex: number, value: string) => {
+    if (isReadOnly) return;
     const teamKey = teamNumber === 1 ? 'team1' : 'team2';
     setNewMatch(prev => ({
       ...prev,
@@ -57,6 +64,7 @@ const NewMatchTab: React.FC<NewMatchTabProps> = ({
           </h3>
           <button
             onClick={() => addPlayerToTeam(teamNumber)}
+            disabled={isReadOnly}
             className={`bg-${teamColor}-600 hover:bg-${teamColor}-700 dark:bg-${teamColor}-500 dark:hover:bg-${teamColor}-600 text-white px-3 py-1 rounded-md text-sm flex items-center gap-1 transition-colors duration-200`}
           >
             <Plus className="w-4 h-4" />
@@ -83,12 +91,14 @@ const NewMatchTab: React.FC<NewMatchTabProps> = ({
                   placeholder="Player name"
                   className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-${teamColor}-500 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-400 transition-colors duration-200`}
                   players={players}
+                  disabled={isReadOnly}
                 />
               </div>
               
               {team.length > 1 && (
                 <button
                   onClick={() => removePlayerFromTeam(teamNumber, index)}
+                  disabled={isReadOnly}
                   className="mt-6 bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 text-white p-2 rounded-md transition-colors duration-200 flex-shrink-0"
                   title="Remove player"
                 >
@@ -108,6 +118,12 @@ const NewMatchTab: React.FC<NewMatchTabProps> = ({
         <Plus className="w-6 h-6 text-green-500" />
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">New Match</h2>
       </div>
+
+      {isReadOnly && (
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm text-amber-800 dark:text-amber-200">
+          {readOnlyMessage || 'You are viewing a past season. Matches are read-only.'}
+        </div>
+      )}
 
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border dark:border-gray-700 transition-colors duration-200">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -129,6 +145,7 @@ const NewMatchTab: React.FC<NewMatchTabProps> = ({
                 max="99"
                 value={newMatch.team1Score}
                 onChange={(e) => setNewMatch({...newMatch, team1Score: parseInt(e.target.value) || 0})}
+                disabled={isReadOnly}
                 className="w-20 p-2 text-center text-lg font-bold border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white transition-colors duration-200"
               />
             </div>
@@ -145,6 +162,7 @@ const NewMatchTab: React.FC<NewMatchTabProps> = ({
                 max="99"
                 value={newMatch.team2Score}
                 onChange={(e) => setNewMatch({...newMatch, team2Score: parseInt(e.target.value) || 0})}
+                disabled={isReadOnly}
                 className="w-20 p-2 text-center text-lg font-bold border rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white transition-colors duration-200"
               />
             </div>
@@ -169,7 +187,7 @@ const NewMatchTab: React.FC<NewMatchTabProps> = ({
         <div className="mt-6 text-center">
           <button
             onClick={onAddMatch}
-            disabled={newMatch.team1.length === 0 || newMatch.team2.length === 0}
+            disabled={isReadOnly || newMatch.team1.length === 0 || newMatch.team2.length === 0}
             className="bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white px-6 py-3 rounded-md font-medium flex items-center gap-2 mx-auto transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus className="w-5 h-5" />

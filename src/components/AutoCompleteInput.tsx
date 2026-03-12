@@ -9,6 +9,7 @@ interface AutoCompleteInputProps {
   placeholder: string;
   className?: string;
   players: Player[];
+  disabled?: boolean;
 }
 
 const AutoCompleteInput: React.FC<AutoCompleteInputProps> = ({ 
@@ -16,13 +17,15 @@ const AutoCompleteInput: React.FC<AutoCompleteInputProps> = ({
   onChange, 
   placeholder, 
   className,
-  players
+  players,
+  disabled = false
 }) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   const getPlayerSuggestions = (input: string) => {
+    if (disabled) return [];
     if (!input || input.length < 1) return [];
     return players
       .filter(p => p.name.toLowerCase().includes(input.toLowerCase()))
@@ -85,6 +88,7 @@ const AutoCompleteInput: React.FC<AutoCompleteInputProps> = ({
         onKeyDown={handleKeyDown}
         onFocus={() => value.length > 0 && setShowSuggestions(true)}
         onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+        disabled={disabled}
         className={className}
         placeholder={placeholder}
         autoComplete="off"

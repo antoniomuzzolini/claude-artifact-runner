@@ -74,8 +74,8 @@ export async function POST(req: NextRequest) {
 
     for (const match of matchesData) {
       await sql`
-        INSERT INTO matches (id, date, time, team1, team2, winner, team1_score, team2_score, elo_changes, created_by, organization_id)
-        VALUES (${match.id}, ${match.date}, ${match.time}, ${match.team1}, ${match.team2}, ${match.winner}, ${match.team1Score}, ${match.team2Score}, ${JSON.stringify(match.eloChanges)}, ${match.createdBy || currentUser.userId}, ${currentUser.organizationId})
+        INSERT INTO matches (id, date, time, team1, team2, winner, team1_score, team2_score, elo_changes, created_by, organization_id, season_id)
+        VALUES (${match.id}, ${match.date}, ${match.time}, ${match.team1}, ${match.team2}, ${match.winner}, ${match.team1Score}, ${match.team2Score}, ${JSON.stringify(match.eloChanges)}, ${match.createdBy || currentUser.userId}, ${currentUser.organizationId}, ${match.season_id || null})
         ON CONFLICT (id) DO UPDATE SET
           date = EXCLUDED.date,
           time = EXCLUDED.time,
@@ -85,7 +85,8 @@ export async function POST(req: NextRequest) {
           team1_score = EXCLUDED.team1_score,
           team2_score = EXCLUDED.team2_score,
           elo_changes = EXCLUDED.elo_changes,
-          created_by = EXCLUDED.created_by
+          created_by = EXCLUDED.created_by,
+          season_id = EXCLUDED.season_id
         WHERE matches.organization_id = ${currentUser.organizationId}
       `;
     }
