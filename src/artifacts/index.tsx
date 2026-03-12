@@ -128,8 +128,9 @@ const ChampionshipManager = () => {
     const team1EloChanges: { [name: string]: number } = {};
     const team2EloChanges: { [name: string]: number } = {};
 
-    const minTeamSize = Math.min(team1Players.length, team2Players.length) || 1;
-    
+    let minTeamSize = Math.min(team1Players.length, team2Players.length);
+    if (minTeamSize === 0) minTeamSize = 1;
+
     team1Players.forEach(player => {
       if (!team1EloChanges[player.name]) team1EloChanges[player.name] = 0;
       team2Players.forEach(opponent => {
@@ -140,7 +141,7 @@ const ChampionshipManager = () => {
           newMatch.team1Score / totalPoints
         ) / minTeamSize);
         team1EloChanges[player.name] += newElo; // Average out ELO change across opponents
-        team2EloChanges[opponent.name] += -newElo; // Average out ELO change across opponents
+        team2EloChanges[opponent.name] -= newElo; // Average out ELO change across opponents
       });
     });
 
@@ -300,8 +301,9 @@ const ChampionshipManager = () => {
         const team1EloChanges: { [name: string]: number } = {};
         const team2EloChanges: { [name: string]: number } = {};
 
-        const minTeamSize = Math.min(team1Players.length, team2Players.length) || 1;
-        
+        let minTeamSize = Math.min(team1Players.length, team2Players.length);
+        if (minTeamSize === 0) minTeamSize = 1; // Avoid division by zero
+
         team1Players.forEach(player => {
           if (!team1EloChanges[player.name]) team1EloChanges[player.name] = 0;
           team2Players.forEach(opponent => {
@@ -309,10 +311,10 @@ const ChampionshipManager = () => {
             const newElo = Math.round(calculateELODifference(
               player.elo,
               opponent.elo,
-              newMatch.team1Score / totalPoints
+              match.team1Score / totalPoints
             ) / minTeamSize);
             team1EloChanges[player.name] += newElo; // Average out ELO change across opponents
-            team2EloChanges[opponent.name] += -newElo; // Average out ELO change across opponents
+            team2EloChanges[opponent.name] -= newElo; // Average out ELO change across opponents
           });
         });
 
