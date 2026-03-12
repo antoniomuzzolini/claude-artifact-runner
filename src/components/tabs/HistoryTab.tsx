@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import React from 'react';
-import { Clock, Trash2 } from 'lucide-react';
+import { Clock, Trash2, Crown } from 'lucide-react';
 import { Player, Match } from '../../types/foosball';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -106,7 +106,7 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                       : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'
                   }`}>
                     <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-                      Team 1 {match.winner === 'team1' && 'ðŸ‘‘'}
+                      Team 1 {match.winner === 'team1' && <Crown className="inline h-3 w-3 text-yellow-500" />}
                     </div>
                     <div className="space-y-1">
                       {match.team1.map((player, index) => (
@@ -145,7 +145,7 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                       : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'
                   }`}>
                     <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-                      Team 2 {match.winner === 'team2' && 'ðŸ‘‘'}
+                      Team 2 {match.winner === 'team2' && <Crown className="inline h-3 w-3 text-yellow-500" />}
                     </div>
                     <div className="space-y-1">
                       {match.team2.map((player, index) => (

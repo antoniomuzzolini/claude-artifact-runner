@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import React, { useState, useEffect } from 'react';
-import { Trophy, PlusCircle, BarChart3, Settings, Calendar, ChevronDown } from 'lucide-react';
+import { Trophy, PlusCircle, BarChart3, Settings, Calendar, AlertTriangle } from 'lucide-react';
 
 // Import types
 import { Match, NewMatch, AppData, Player } from '../types/foosball';
@@ -521,26 +521,23 @@ const ChampionshipManager = () => {
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
                 {organization?.name || 'Championship Manager'}
               </h1>
-              <div className="relative">
-                <select
-                  value={effectiveSeasonId ?? ''}
-                  onChange={(e) => {
-                    if (!e.target.value) return;
-                    handleSelectSeason(Number(e.target.value));
-                  }}
-                  className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200 pr-8"
-                >
-                  {seasonOptions.length === 0 && (
-                    <option value="">Loading...</option>
-                  )}
-                  {seasonOptions.map(season => (
-                    <option key={season.id} value={season.id}>
-                      {season.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-              </div>
+              <select
+                value={effectiveSeasonId ?? ''}
+                onChange={(e) => {
+                  if (!e.target.value) return;
+                  handleSelectSeason(Number(e.target.value));
+                }}
+                className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200"
+              >
+                {seasonOptions.length === 0 && (
+                  <option value="">Loading...</option>
+                )}
+                {seasonOptions.map(season => (
+                  <option key={season.id} value={season.id}>
+                    {season.name}
+                  </option>
+                ))}
+              </select>
               {!isViewingCurrentSeason && (
                 <span className="text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 px-2 py-1 rounded-full">
                   Read-only season
@@ -632,8 +629,9 @@ const ChampionshipManager = () => {
               <>
                 {error ? (
                   <div className="text-center py-8">
-                    <div className="text-red-600 dark:text-red-400 mb-4">
-                      âš ï¸ Cannot add matches - database error
+                    <div className="text-red-600 dark:text-red-400 mb-4 flex items-center justify-center gap-2">
+                      <AlertTriangle className="h-4 w-4" />
+                      <span>Cannot add matches - database error</span>
                     </div>
                     <p className="text-gray-600 dark:text-gray-400">{error}</p>
                   </div>

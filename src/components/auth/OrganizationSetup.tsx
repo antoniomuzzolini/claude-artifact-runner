@@ -58,7 +58,7 @@ const OrganizationSetup: React.FC<OrganizationSetupProps> = ({
       <div className="max-w-md w-full space-y-8 p-8">
         {/* Header */}
         <div className="text-center">
-          <div className="text-4xl mb-4">ðŸ¢</div>
+          <Building2 className="mx-auto h-10 w-10 text-blue-600 mb-4" />
           <h2 className="text-3xl font-bold text-gray-900">Create Organization</h2>
           <p className="mt-2 text-sm text-gray-600">Set up your championship organization and admin account</p>
         </div>

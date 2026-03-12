@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import React, { useState } from 'react';
-import { LogIn, Eye, EyeOff, Building2 } from 'lucide-react';
+import { LogIn, Eye, EyeOff, Building2, Trophy } from 'lucide-react';
 import { LoginCredentials } from '../../types/auth';
 import ThemeToggle from '../ui/theme-toggle';
 
@@ -45,7 +45,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
 
         {/* Header */}
         <div className="text-center">
-          <div className="text-4xl mb-4">ðŸ†</div>
+          <Trophy className="mx-auto h-10 w-10 text-yellow-500 mb-4" />
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Championship Manager</h2>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Sign in to your account</p>
         </div>
