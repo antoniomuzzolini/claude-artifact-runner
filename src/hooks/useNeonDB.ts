@@ -80,12 +80,12 @@ export const useNeonDB = () => {
         if (cloudData) {
           const parsedSeasonId = Number(cloudData.currentSeasonId);
           const resolvedSeasonId = Number.isFinite(parsedSeasonId) ? parsedSeasonId : null;
-          const rawPlayers = Array.isArray(cloudData.players) ? cloudData.players : [];
-          const rawMatches = Array.isArray(cloudData.matches) ? cloudData.matches : [];
-          const rawSeasons = Array.isArray(cloudData.seasons) ? cloudData.seasons : [];
+          const rawPlayers = Array.isArray(cloudData.players) ? (cloudData.players as Player[]) : [];
+          const rawMatches = Array.isArray(cloudData.matches) ? (cloudData.matches as Match[]) : [];
+          const rawSeasons = Array.isArray(cloudData.seasons) ? (cloudData.seasons as Season[]) : [];
 
           setPlayers(
-            rawPlayers.map(player => {
+            rawPlayers.map((player: Player) => {
               const parsedPlayerSeason = Number(player.season_id);
               return {
                 ...player,
@@ -96,7 +96,7 @@ export const useNeonDB = () => {
             })
           );
           setMatches(
-            rawMatches.map(match => {
+            rawMatches.map((match: Match) => {
               const parsedMatchSeason = Number(match.season_id);
               return {
                 ...match,
@@ -107,7 +107,7 @@ export const useNeonDB = () => {
             })
           );
           setSeasons(
-            rawSeasons.map(season => ({
+            rawSeasons.map((season: Season) => ({
               ...season,
               id: Number(season.id)
             }))
@@ -186,12 +186,12 @@ export const useNeonDB = () => {
       // Update local state
       const parsedSeasonId = Number(data.currentSeasonId);
       const resolvedSeasonId = Number.isFinite(parsedSeasonId) ? parsedSeasonId : null;
-      const rawPlayers = Array.isArray(data.players) ? data.players : [];
-      const rawMatches = Array.isArray(data.matches) ? data.matches : [];
-      const rawSeasons = Array.isArray(data.seasons) ? data.seasons : [];
+      const rawPlayers = Array.isArray(data.players) ? (data.players as Player[]) : [];
+      const rawMatches = Array.isArray(data.matches) ? (data.matches as Match[]) : [];
+      const rawSeasons = Array.isArray(data.seasons) ? (data.seasons as Season[]) : [];
 
       setPlayers(
-        rawPlayers.map(player => {
+        rawPlayers.map((player: Player) => {
           const parsedPlayerSeason = Number(player.season_id);
           return {
             ...player,
@@ -202,7 +202,7 @@ export const useNeonDB = () => {
         })
       );
       setMatches(
-        rawMatches.map(match => {
+        rawMatches.map((match: Match) => {
           const parsedMatchSeason = Number(match.season_id);
           return {
             ...match,
@@ -213,7 +213,7 @@ export const useNeonDB = () => {
         })
       );
       setSeasons(
-        rawSeasons.map(season => ({
+        rawSeasons.map((season: Season) => ({
           ...season,
           id: Number(season.id)
         }))
