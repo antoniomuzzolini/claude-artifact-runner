@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import CompleteInvitation from '../../components/auth/CompleteInvitation';
 
+export const dynamic = 'force-dynamic';
+
 export default function CompleteInvitationPage() {
   const [token, setToken] = useState<string | null>(null);
   const searchParams = useSearchParams();
