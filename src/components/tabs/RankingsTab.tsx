@@ -10,7 +10,7 @@ interface RankingsTabProps {
 
 const RankingsTab: React.FC<RankingsTabProps> = ({ players, onPlayerClick, onPlayerStatsClick }) => {
   // Sort players by ELO rating (highest first)
-  const sortedPlayers = [...players].sort((a, b) => b.elo - a.elo);
+  const sortedPlayers = [...players].filter(p => p.matches > 10).sort((a, b) => b.elo - a.elo);
 
   const getRankIcon = (rank: number) => {
     switch (rank) {
