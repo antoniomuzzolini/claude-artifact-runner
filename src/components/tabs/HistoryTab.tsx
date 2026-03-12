@@ -175,7 +175,7 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                     ELO Changes
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {Object.entries(match.eloChanges).map(([playerName, change]) => (
+                    {match.team1.concat(match.team2).map((playerName, index) => (
                       <div
                         key={playerName}
                         onClick={(e) => {
@@ -198,9 +198,9 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                           {playerName}
                         </div>
                         <div className={`text-sm font-bold ${
-                          change > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                          match.eloChanges[playerName] > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                         }`}>
-                          {change > 0 ? '+' : ''}{change}
+                          {match.eloChanges[playerName] > 0 ? '+' : ''}{match.eloChanges[playerName]}
                         </div>
                       </div>
                     ))}
