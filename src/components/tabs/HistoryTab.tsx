@@ -175,7 +175,7 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                     ELO Changes
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {match.team1.concat(match.team2).map((playerName, index) => (
+                    {match.team1.concat(match.team2).map((playerName) => (
                       <div
                         key={playerName}
                         onClick={(e) => {
