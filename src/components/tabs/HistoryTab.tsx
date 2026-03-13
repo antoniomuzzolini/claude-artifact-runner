@@ -87,7 +87,7 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                     <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">
-                      {match.date} at {match.time}
+                      {new Date(match.date).toLocaleDateString('en-UK')} at {match.time}
                     </span>
                   </div>
                   <div className="text-lg font-bold text-gray-900 dark:text-white">

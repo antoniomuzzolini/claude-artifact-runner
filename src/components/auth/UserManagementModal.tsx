@@ -330,7 +330,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
                         </div>
                         {user.status === 'active' && user.last_login && (
                           <div className="text-xs text-gray-400 dark:text-gray-500">
-                            Last login: {new Date(user.last_login).toLocaleDateString()}
+                            Last login: {new Date(user.last_login).toLocaleDateString('en-UK')}
                           </div>
                         )}
                         {user.status === 'pending' && (

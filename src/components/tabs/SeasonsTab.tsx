@@ -17,8 +17,8 @@ interface SeasonsTabProps {
 }
 
 const formatDateRange = (season: Season) => {
-  const start = season.startDate ? new Date(season.startDate).toLocaleDateString('en-US') : 'N/A';
-  const end = season.endDate ? new Date(season.endDate).toLocaleDateString('en-US') : 'Ongoing';
+  const start = season.startDate ? new Date(season.startDate).toLocaleDateString('en-UK') : 'N/A';
+  const end = season.endDate ? new Date(season.endDate).toLocaleDateString('en-UK') : 'Ongoing';
   return `${start} - ${end}`;
 };
 

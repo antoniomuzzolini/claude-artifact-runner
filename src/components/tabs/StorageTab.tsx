@@ -197,7 +197,7 @@ const StorageTab: React.FC<StorageTabProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-sm text-gray-600 dark:text-gray-300">Last saved:</span>
             <span className="text-sm text-gray-900 dark:text-white">
-              {lastSaved ? lastSaved.toLocaleString('en-US') : 'Never'}
+              {lastSaved ? lastSaved.toLocaleString('en-UK') : 'Never'}
             </span>
           </div>
           
