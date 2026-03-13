@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Trophy, PlusCircle, BarChart3, Settings, Calendar, AlertTriangle } from 'lucide-react';
 
 // Import types
-import { Match, NewMatch, AppData, Player } from '../types/foosball';
+import { Match, NewMatch, AppData, Player } from '../types/championship';
 
 // Import hooks
 import { useNeonDB } from '../hooks/useNeonDB';
@@ -493,7 +493,7 @@ const ChampionshipManager = () => {
           <nav className="flex space-x-8" aria-label="Tabs">
             {[
               { id: 'rankings', name: 'Rankings', Icon: Trophy },
-              { id: 'new-match', name: 'New Match', Icon: PlusCircle },
+              ...(isViewingCurrentSeason ? [{ id: 'new-match', name: 'New Match', Icon: PlusCircle }] : []),
               { id: 'history', name: 'History', Icon: BarChart3 },
               { id: 'seasons', name: 'Seasons', Icon: Calendar },
               ...(user?.role === 'superuser' ? [{ id: 'storage', name: 'Settings', Icon: Settings }] : []),

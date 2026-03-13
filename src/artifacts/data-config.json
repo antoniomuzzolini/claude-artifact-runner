@@ -4,7 +4,7 @@
     "storageTypes": {
       "localStorage": {
         "enabled": true,
-        "key": "foosballData",
+        "key": "championshipData",
         "autoSave": true,
         "description": "Browser-based persistent storage"
       },
@@ -13,12 +13,12 @@
         "folder": "artifacts",
         "autoSave": true,
         "autoSaveInterval": 10,
-        "fileNamePattern": "foosball-data-{date}.json",
+        "fileNamePattern": "championship-data-{date}.json",
         "description": "File-based storage in artifacts folder"
       },
       "backup": {
         "enabled": true,
-        "fileNamePattern": "foosball-backup-{date}.json",
+        "fileNamePattern": "championship-backup-{date}.json",
         "includeMetadata": true,
         "description": "Manual backup system"
       }
@@ -59,10 +59,10 @@
   "artifactsFolder": {
     "purpose": "Store application data files",
     "structure": {
-      "index.tsx": "Main foosball manager application",
-      "foosball-data-sample.json": "Sample data structure",
-      "foosball-data-*.json": "Auto-saved data files",
-      "foosball-backup-*.json": "Manual backup files",
+      "index.tsx": "Main championship manager application",
+      "championship-data-sample.json": "Sample data structure",
+      "championship-data-*.json": "Auto-saved data files",
+      "championship-backup-*.json": "Manual backup files",
       "README.md": "Documentation",
       "data-config.json": "Configuration file"
     },

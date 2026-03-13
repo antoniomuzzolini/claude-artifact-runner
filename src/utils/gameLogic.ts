@@ -1,4 +1,4 @@
-import { Player } from '../types/foosball';
+import { Player } from '../types/championship';
 
 // Calculate ELO rating
 export const calculateELODifference = (playerRating: number, opponentRating: number, actualScore: number, kFactor = 32) => {

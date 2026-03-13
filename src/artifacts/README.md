@@ -1,6 +1,6 @@
-# Foosball Manager - Advanced Data Persistence
+# Championship Manager - Advanced Data Persistence
 
-This folder contains the Foosball Manager application with enhanced automatic data persistence that works like file storage but without manual intervention.
+This folder contains the Championship Manager application with enhanced automatic data persistence that works like file storage but without manual intervention.
 
 ## 🚀 New Features - Automatic File-like Storage
 
@@ -15,7 +15,7 @@ The application now uses **IndexedDB** as primary storage, providing automatic, 
 ## Files
 
 ### `index.tsx`
-Enhanced Foosball Manager with advanced data persistence:
+Enhanced Championship Manager with advanced data persistence:
 - **IndexedDB**: Primary automatic storage (file-like behavior)
 - **localStorage**: Real-time backup fallback
 - **File export**: Downloadable files for artifacts folder
@@ -126,9 +126,9 @@ User Action (Add Match)
 
 ## File Naming Convention
 
-- Auto-exported files: `foosball-data-YYYY-MM-DD.json`
-- Manual backups: `foosball-backup-YYYY-MM-DD.json`
-- Database name: `FoosballManagerDB`
+- Auto-exported files: `championship-data-YYYY-MM-DD.json`
+- Manual backups: `championship-backup-YYYY-MM-DD.json`
+- Database name: `ChampionshipManagerDB`
 - Store name: `gameData`
 
 ## Migration Notes

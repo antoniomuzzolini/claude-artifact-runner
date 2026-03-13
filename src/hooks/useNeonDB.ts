@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { AppData, Player, Match, Season } from '../types/foosball';
+import { AppData, Player, Match, Season } from '../types/championship';
 import { useAuth } from './useAuth';
 
 const resolveWinnerIndex = (scores: number[], winnerIndex?: number | null) => {

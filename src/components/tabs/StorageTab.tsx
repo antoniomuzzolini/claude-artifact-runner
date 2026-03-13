@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Download, Upload, Cloud, Wifi, WifiOff, RefreshCw, Trash2, AlertTriangle } from 'lucide-react';
-import { Player, Match, Season } from '../../types/foosball';
+import { Player, Match, Season } from '../../types/championship';
 
 interface StorageTabProps {
   players: Player[];

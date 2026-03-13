@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import React, { useState } from 'react';
-import { Player } from '../types/foosball';
+import { Player } from '../types/championship';
 
 interface AutoCompleteInputProps {
   value: string;

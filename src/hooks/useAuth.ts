@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { User, LoginCredentials, AuthResponse, getPermissions, OrganizationSetupData } from '../types/auth';
-import { Organization } from '../types/foosball';
+import { Organization } from '../types/championship';
 
 const API_BASE = process.env.NODE_ENV === 'production' 
   ? '' 

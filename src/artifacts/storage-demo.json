@@ -1,6 +1,6 @@
 {
   "demo": {
-    "title": "Foosball Manager - Automatic Storage Demo",
+    "title": "Championship Manager - Automatic Storage Demo",
     "description": "This file demonstrates the automatic data persistence system"
   },
   "sampleWorkflow": {
@@ -19,7 +19,7 @@
     "step3": {
       "action": "Every 10 matches",
       "storage": "Auto-exports to downloadable JSON file",
-      "filename": "artifacts/foosball-data-YYYY-MM-DD.json",
+      "filename": "artifacts/championship-data-YYYY-MM-DD.json",
       "purpose": "Creates file for artifacts folder backup"
     },
     "step4": {
@@ -66,7 +66,7 @@
       "automatic": "Every 10 matches",
       "manual": "On-demand export",
       "import": "Load data from any compatible JSON file",
-      "format": "Standard foosball data structure"
+      "format": "Standard championship data structure"
     }
   },
   "usageInstructions": {

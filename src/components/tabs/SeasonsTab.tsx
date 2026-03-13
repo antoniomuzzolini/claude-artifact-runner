@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Trophy, Calendar, PlusCircle } from 'lucide-react';
-import { Player, Season } from '../../types/foosball';
+import { Player, Season } from '../../types/championship';
 
 interface SeasonsTabProps {
   seasons: Season[];

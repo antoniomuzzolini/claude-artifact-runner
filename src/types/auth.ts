@@ -1,6 +1,6 @@
 // Authentication types for the Championship Manager application
 
-import { Organization } from './foosball';
+import { Organization } from './championship';
 
 export interface User {
   id: number;

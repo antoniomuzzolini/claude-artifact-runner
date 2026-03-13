@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Plus, Minus, X } from 'lucide-react';
-import { Player, NewMatch } from '../../types/foosball';
+import { Player, NewMatch } from '../../types/championship';
 import AutoCompleteInput from '../AutoCompleteInput';
 
 interface NewMatchTabProps {
@@ -196,7 +196,10 @@ const NewMatchTab: React.FC<NewMatchTabProps> = ({
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div
+          className="grid gap-6"
+          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}
+        >
           {newMatch.teams.map((_, index) => renderTeam(index))}
         </div>
 

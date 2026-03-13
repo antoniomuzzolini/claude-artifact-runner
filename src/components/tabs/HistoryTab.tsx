@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Clock, Trash2, Crown } from 'lucide-react';
-import { Player, Match } from '../../types/foosball';
+import { Player, Match } from '../../types/championship';
 import { useAuth } from '../../hooks/useAuth';
 
 interface HistoryTabProps {
@@ -98,7 +98,10 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
 
               {/* Teams Display */}
               <div className="p-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
+                <div
+                  className="grid gap-4 items-start"
+                  style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}
+                >
                   {match.teams.map((team, teamIndex) => (
                     <div
                       key={`team-${teamIndex}`}

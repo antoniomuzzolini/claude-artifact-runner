@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { X, Target, Users } from 'lucide-react';
-import { Player, Match } from '../types/foosball';
+import { Player, Match } from '../types/championship';
 
 interface PlayerStatsModalProps {
   player: Player | null;

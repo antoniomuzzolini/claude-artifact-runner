@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Trophy, Medal, Award } from 'lucide-react';
-import { Player } from '../../types/foosball';
+import { Player } from '../../types/championship';
 
 interface RankingsTabProps {
   players: Player[];
