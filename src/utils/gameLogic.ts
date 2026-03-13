@@ -37,23 +37,78 @@ export const findOrCreatePlayer = (
   return newPlayer;
 };
 
+const getWinnerIndex = (scores: number[]): number | null => {
+  if (!Array.isArray(scores) || scores.length === 0) return null;
+  const maxScore = Math.max(...scores);
+  const maxIndexes = scores
+    .map((score, index) => ({ score, index }))
+    .filter(item => item.score === maxScore)
+    .map(item => item.index);
+  if (maxIndexes.length !== 1) return null;
+  return maxIndexes[0];
+};
+
 // Validate match data
 export const validateMatch = (
-  team1: string[],
-  team2: string[],
-  team1Score: number,
-  team2Score: number
+  teams: string[][],
+  scores: number[]
 ): boolean => {
-  return !!(
-    team1.length > 0 && 
-    team2.length > 0 && 
-    team1.every(name => name.trim()) && 
-    team2.every(name => name.trim()) && 
-    team1Score !== team2Score &&
-    // Ensure no duplicate players across teams
-    !team1.some(p1 => team2.some(p2 => p1.toLowerCase() === p2.toLowerCase())) &&
-    // Ensure no duplicate players within teams
-    team1.length === new Set(team1.map(p => p.toLowerCase())).size &&
-    team2.length === new Set(team2.map(p => p.toLowerCase())).size
-  );
+  if (!Array.isArray(teams) || teams.length < 2) return false;
+  if (!Array.isArray(scores) || scores.length !== teams.length) return false;
+  if (!scores.every(score => Number.isFinite(score) && score >= 0)) return false;
+
+  const allPlayers = teams.flat();
+  if (allPlayers.length === 0) return false;
+  if (!allPlayers.every(name => name.trim())) return false;
+
+  const normalizedAll = allPlayers.map(name => name.trim().toLowerCase());
+  const uniqueAll = new Set(normalizedAll);
+  if (uniqueAll.size !== normalizedAll.length) return false;
+
+  for (const team of teams) {
+    if (team.length === 0) return false;
+    const normalizedTeam = team.map(name => name.trim().toLowerCase());
+    if (new Set(normalizedTeam).size !== normalizedTeam.length) return false;
+  }
+
+  return true;
 }; 
+
+export const calculateMultiTeamEloChanges = (
+  teams: Player[][],
+  scores: number[]
+) => {
+  const winnerIndex = getWinnerIndex(scores);
+
+  const teamSizes = teams.map(team => team.length).filter(size => size > 0);
+  const minTeamSize = Math.max(1, Math.min(...teamSizes));
+  const teamCount = teams.length;
+  const teamDivisor = Math.max(1, teamCount - 1);
+  const divisor = minTeamSize * teamDivisor;
+
+  const eloChanges: { [playerName: string]: number } = {};
+
+  for (let i = 0; i < teams.length; i += 1) {
+    for (let j = i + 1; j < teams.length; j += 1) {
+      const teamA = teams[i];
+      const teamB = teams[j];
+      const scoreA = scores[i] ?? 0;
+      const scoreB = scores[j] ?? 0;
+      const totalPairPoints = scoreA + scoreB || 1;
+      const actualScoreA = scoreA / totalPairPoints;
+
+      teamA.forEach(player => {
+        if (!eloChanges[player.name]) eloChanges[player.name] = 0;
+        teamB.forEach(opponent => {
+          if (!eloChanges[opponent.name]) eloChanges[opponent.name] = 0;
+          const diff = calculateELODifference(player.elo, opponent.elo, actualScoreA);
+          const adjusted = Math.round(diff / divisor);
+          eloChanges[player.name] += adjusted;
+          eloChanges[opponent.name] -= adjusted;
+        });
+      });
+    }
+  }
+
+  return { winnerIndex, eloChanges };
+};

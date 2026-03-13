@@ -94,17 +94,19 @@ export async function POST() {
         id BIGINT PRIMARY KEY,
         date VARCHAR(255) NOT NULL,
         time VARCHAR(255) NOT NULL,
-        team1 TEXT[] NOT NULL,
-        team2 TEXT[] NOT NULL,
-        winner VARCHAR(255) NOT NULL,
-        team1_score INTEGER NOT NULL,
-        team2_score INTEGER NOT NULL,
+        teams JSONB,
+        scores INTEGER[],
+        winner_index INTEGER,
         elo_changes JSONB,
         organization_id INTEGER,
         season_id BIGINT,
         created_at TIMESTAMP DEFAULT NOW()
       );
     `;
+
+    await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS teams JSONB;`;
+    await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS scores INTEGER[];`;
+    await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS winner_index INTEGER;`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS seasons (

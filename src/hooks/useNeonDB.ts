@@ -4,6 +4,34 @@ import { useState, useEffect, useCallback } from 'react';
 import { AppData, Player, Match, Season } from '../types/foosball';
 import { useAuth } from './useAuth';
 
+const resolveWinnerIndex = (scores: number[], winnerIndex?: number | null) => {
+  if (typeof winnerIndex === 'number' && Number.isFinite(winnerIndex)) return winnerIndex;
+  if (!scores.length) return null;
+  const maxScore = Math.max(...scores);
+  const maxIndexes = scores
+    .map((score, index) => ({ score, index }))
+    .filter(item => item.score === maxScore)
+    .map(item => item.index);
+  return maxIndexes.length === 1 ? maxIndexes[0] : null;
+};
+
+const normalizeMatch = (match: Match): Match => {
+  const teams = Array.isArray(match.teams) ? match.teams : [];
+  const rawScores = Array.isArray(match.scores) ? match.scores : [];
+  const scores = rawScores.length < teams.length
+    ? [...rawScores, ...Array(teams.length - rawScores.length).fill(0)]
+    : rawScores;
+  const winnerIndex = resolveWinnerIndex(scores, match.winnerIndex ?? null);
+
+  return {
+    ...match,
+    teams,
+    scores,
+    winnerIndex,
+    eloChanges: match.eloChanges ?? {}
+  };
+};
+
 export const useNeonDB = () => {
   const { makeAuthenticatedRequest, isAuthenticated } = useAuth();
   const [players, setPlayers] = useState<Player[]>([]);
@@ -99,7 +127,7 @@ export const useNeonDB = () => {
             rawMatches.map((match: Match) => {
               const parsedMatchSeason = Number(match.season_id);
               return {
-                ...match,
+                ...normalizeMatch(match),
                 season_id: Number.isFinite(parsedMatchSeason)
                   ? parsedMatchSeason
                   : (resolvedSeasonId ?? match.season_id)
@@ -205,7 +233,7 @@ export const useNeonDB = () => {
         rawMatches.map((match: Match) => {
           const parsedMatchSeason = Number(match.season_id);
           return {
-            ...match,
+            ...normalizeMatch(match),
             season_id: Number.isFinite(parsedMatchSeason)
               ? parsedMatchSeason
               : (resolvedSeasonId ?? match.season_id)

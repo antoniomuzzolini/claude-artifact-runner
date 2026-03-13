@@ -96,6 +96,7 @@ const StorageTab: React.FC<StorageTabProps> = ({
     setSeasonMessage('Season name updated.');
   };
 
+
   return (
     <div className="space-y-6">
       {isSuperuser && currentSeason && (

@@ -40,6 +40,17 @@ function getCurrentUser(req: NextRequest) {
   }
 }
 
+const resolveWinnerIndex = (scores: number[], winnerIndex?: number | null) => {
+  if (typeof winnerIndex === 'number' && Number.isFinite(winnerIndex)) return winnerIndex;
+  if (!scores.length) return null;
+  const maxScore = Math.max(...scores);
+  const maxIndexes = scores
+    .map((score, index) => ({ score, index }))
+    .filter(item => item.score === maxScore)
+    .map(item => item.index);
+  return maxIndexes.length === 1 ? maxIndexes[0] : null;
+};
+
 async function ensureSeasonsSchema() {
   await sql`
     CREATE TABLE IF NOT EXISTS seasons (
@@ -55,6 +66,9 @@ async function ensureSeasonsSchema() {
 
   await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS season_id BIGINT;`;
   await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS season_id BIGINT;`;
+  await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS teams JSONB;`;
+  await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS scores INTEGER[];`;
+  await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS winner_index INTEGER;`;
 }
 
 async function ensureCurrentSeason(organizationId: number) {
@@ -134,13 +148,19 @@ export async function GET(req: NextRequest) {
       `
     ]);
 
-    const transformedMatches = matches.map(match => ({
-      ...match,
-      team1Score: match.team1_score,
-      team2Score: match.team2_score,
-      eloChanges: match.elo_changes,
-      createdBy: match.created_by
-    }));
+    const transformedMatches = matches.map(match => {
+      const teams = Array.isArray(match.teams) ? match.teams : [];
+      const scores = Array.isArray(match.scores) ? match.scores : [];
+      const winnerIndex = resolveWinnerIndex(scores, match.winner_index);
+      return {
+        ...match,
+        teams,
+        scores,
+        winnerIndex,
+        eloChanges: match.elo_changes,
+        createdBy: match.created_by
+      };
+    });
 
     const seasons = await sql`
       SELECT * FROM seasons
@@ -245,17 +265,19 @@ export async function POST(req: NextRequest) {
 
     if (Array.isArray(matchesData)) {
       for (const match of matchesData) {
+        const teams = Array.isArray(match.teams) ? match.teams : [];
+        const scores = Array.isArray(match.scores) ? match.scores : [];
+        const winnerIndex = resolveWinnerIndex(scores, match.winnerIndex ?? null);
+
         await sql`
-          INSERT INTO matches (id, date, time, team1, team2, winner, team1_score, team2_score, elo_changes, created_by, organization_id, season_id)
+          INSERT INTO matches (id, date, time, teams, scores, winner_index, elo_changes, created_by, organization_id, season_id)
           VALUES (
             ${match.id},
             ${match.date},
             ${match.time},
-            ${match.team1},
-            ${match.team2},
-            ${match.winner},
-            ${match.team1Score},
-            ${match.team2Score},
+            ${JSON.stringify(teams)},
+            ${scores},
+            ${winnerIndex},
             ${JSON.stringify(match.eloChanges)},
             ${match.createdBy || currentUser.userId},
             ${currentUser.organizationId},
@@ -264,11 +286,9 @@ export async function POST(req: NextRequest) {
           ON CONFLICT (id) DO UPDATE SET
             date = EXCLUDED.date,
             time = EXCLUDED.time,
-            team1 = EXCLUDED.team1,
-            team2 = EXCLUDED.team2,
-            winner = EXCLUDED.winner,
-            team1_score = EXCLUDED.team1_score,
-            team2_score = EXCLUDED.team2_score,
+            teams = EXCLUDED.teams,
+            scores = EXCLUDED.scores,
+            winner_index = EXCLUDED.winner_index,
             elo_changes = EXCLUDED.elo_changes,
             created_by = EXCLUDED.created_by,
             season_id = EXCLUDED.season_id

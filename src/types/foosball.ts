@@ -23,11 +23,9 @@ export interface Match {
   id: number;
   date: string;
   time: string;
-  team1: string[];
-  team2: string[];
-  winner: string;
-  team1Score: number;
-  team2Score: number;
+  teams: string[][];
+  scores: number[];
+  winnerIndex: number | null;
   eloChanges: { [playerName: string]: number };
   createdBy?: number; // User ID who created the match
   organization_id: number;
@@ -35,10 +33,8 @@ export interface Match {
 }
 
 export interface NewMatch {
-  team1: string[];
-  team2: string[];
-  team1Score: number;
-  team2Score: number;
+  teams: string[][];
+  scores: number[];
 }
 
 export interface Season {

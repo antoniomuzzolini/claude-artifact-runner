@@ -91,86 +91,52 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                     </span>
                   </div>
                   <div className="text-lg font-bold text-gray-900 dark:text-white">
-                    {match.team1Score} - {match.team2Score}
+                    {match.scores.join(' - ')}
                   </div>
                 </div>
               </div>
 
               {/* Teams Display */}
               <div className="p-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-                  {/* Team 1 */}
-                  <div className={`text-center p-3 rounded-lg border-2 transition-all duration-200 ${
-                    match.winner === 'team1' 
-                      ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-600' 
-                      : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'
-                  }`}>
-                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-                      Team 1 {match.winner === 'team1' && <Crown className="inline h-3 w-3 text-yellow-500" />}
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
+                  {match.teams.map((team, teamIndex) => (
+                    <div
+                      key={`team-${teamIndex}`}
+                      className={`text-center p-3 rounded-lg border-2 transition-all duration-200 ${
+                        match.winnerIndex === teamIndex
+                          ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-600'
+                          : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'
+                      }`}
+                    >
+                      <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+                        Team {teamIndex + 1}{' '}
+                        {match.winnerIndex === teamIndex && <Crown className="inline h-3 w-3 text-yellow-500" />}
+                      </div>
+                      <div className="space-y-1">
+                        {team.map((player, index) => (
+                          <div
+                            key={index}
+                            onClick={(e) => {
+                              if (onPlayerStatsClick) {
+                                e.stopPropagation();
+                                onPlayerStatsClick(player);
+                              }
+                            }}
+                            className={`text-sm font-medium cursor-pointer hover:underline transition-colors duration-200 ${
+                              matchFilterPlayer === player
+                                ? 'text-blue-600 dark:text-blue-400 font-bold'
+                                : 'text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400'
+                            }`}
+                          >
+                            {player}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="text-lg font-bold text-gray-900 dark:text-white mt-2">
+                        {match.scores[teamIndex] ?? 0}
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      {match.team1.map((player, index) => (
-                        <div
-                          key={index}
-                          onClick={(e) => {
-                            if (onPlayerStatsClick) {
-                              e.stopPropagation();
-                              onPlayerStatsClick(player);
-                            }
-                          }}
-                          className={`text-sm font-medium cursor-pointer hover:underline transition-colors duration-200 ${
-                            matchFilterPlayer === player 
-                              ? 'text-blue-600 dark:text-blue-400 font-bold' 
-                              : 'text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400'
-                          }`}
-                        >
-                          {player}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="text-lg font-bold text-gray-900 dark:text-white mt-2">
-                      {match.team1Score}
-                    </div>
-                  </div>
-
-                  {/* VS Separator */}
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-gray-400 dark:text-gray-500">VS</div>
-                  </div>
-
-                  {/* Team 2 */}
-                  <div className={`text-center p-3 rounded-lg border-2 transition-all duration-200 ${
-                    match.winner === 'team2' 
-                      ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-600' 
-                      : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'
-                  }`}>
-                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-                      Team 2 {match.winner === 'team2' && <Crown className="inline h-3 w-3 text-yellow-500" />}
-                    </div>
-                    <div className="space-y-1">
-                      {match.team2.map((player, index) => (
-                        <div
-                          key={index}
-                          onClick={(e) => {
-                            if (onPlayerStatsClick) {
-                              e.stopPropagation();
-                              onPlayerStatsClick(player);
-                            }
-                          }}
-                          className={`text-sm font-medium cursor-pointer hover:underline transition-colors duration-200 ${
-                            matchFilterPlayer === player 
-                              ? 'text-blue-600 dark:text-blue-400 font-bold' 
-                              : 'text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400'
-                          }`}
-                        >
-                          {player}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="text-lg font-bold text-gray-900 dark:text-white mt-2">
-                      {match.team2Score}
-                    </div>
-                  </div>
+                  ))}
                 </div>
 
                 {/* ELO Changes */}
@@ -179,7 +145,9 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                     ELO Changes
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {match.team1.concat(match.team2).map((playerName) => (
+                    {match.teams.flat().map((playerName) => {
+                      const change = match.eloChanges[playerName] ?? 0;
+                      return (
                       <div
                         key={playerName}
                         onClick={(e) => {
@@ -202,12 +170,13 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                           {playerName}
                         </div>
                         <div className={`text-sm font-bold ${
-                          match.eloChanges[playerName] > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                          change > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                         }`}>
-                          {match.eloChanges[playerName] > 0 ? '+' : ''}{match.eloChanges[playerName]}
+                          {change > 0 ? '+' : ''}{change}
                         </div>
                       </div>
-                    ))}
+                    );
+                    })}
                   </div>
                 </div>
               </div>

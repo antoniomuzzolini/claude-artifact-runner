@@ -32,7 +32,7 @@
       "matches": {
         "type": "array", 
         "description": "Complete match history",
-        "fields": ["id", "date", "time", "team1", "team2", "winner", "eloChanges"]
+        "fields": ["id", "date", "time", "teams", "scores", "winnerIndex", "eloChanges"]
       },
       "metadata": {
         "type": "object",

@@ -37,16 +37,18 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
 
   // Get all matches for this player
   const playerMatches = matches.filter(match => 
-    match.team1.includes(player.name) || match.team2.includes(player.name)
+    match.teams.some(team => team.includes(player.name))
   );
 
   // Calculate teammate statistics
   const teammateStats = new Map<string, { wins: number; losses: number }>();
   
   playerMatches.forEach(match => {
-    const isTeam1 = match.team1.includes(player.name);
-    const teammates = isTeam1 ? match.team1 : match.team2;
-    const won = (isTeam1 && match.winner === 'team1') || (!isTeam1 && match.winner === 'team2');
+    const teamIndex = match.teams.findIndex(team => team.includes(player.name));
+    if (teamIndex < 0) return;
+    const teammates = match.teams[teamIndex] || [];
+    const won = match.winnerIndex !== null && match.winnerIndex === teamIndex;
+    const isTie = match.winnerIndex === null;
     
     teammates.forEach(teammate => {
       if (teammate !== player.name) {
@@ -54,10 +56,12 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
           teammateStats.set(teammate, { wins: 0, losses: 0 });
         }
         const stats = teammateStats.get(teammate)!;
-        if (won) {
-          stats.wins++;
-        } else {
-          stats.losses++;
+        if (!isTie) {
+          if (won) {
+            stats.wins++;
+          } else {
+            stats.losses++;
+          }
         }
       }
     });
@@ -67,19 +71,25 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
   const opponentStats = new Map<string, { winsAgainst: number; lossesAgainst: number }>();
   
   playerMatches.forEach(match => {
-    const isTeam1 = match.team1.includes(player.name);
-    const opponents = isTeam1 ? match.team2 : match.team1;
-    const won = (isTeam1 && match.winner === 'team1') || (!isTeam1 && match.winner === 'team2');
+    const teamIndex = match.teams.findIndex(team => team.includes(player.name));
+    if (teamIndex < 0) return;
+    const opponents = match.teams
+      .filter((_, index) => index !== teamIndex)
+      .flat();
+    const won = match.winnerIndex !== null && match.winnerIndex === teamIndex;
+    const isTie = match.winnerIndex === null;
     
     opponents.forEach(opponent => {
       if (!opponentStats.has(opponent)) {
         opponentStats.set(opponent, { winsAgainst: 0, lossesAgainst: 0 });
       }
       const stats = opponentStats.get(opponent)!;
-      if (won) {
-        stats.winsAgainst++;
-      } else {
-        stats.lossesAgainst++;
+      if (!isTie) {
+        if (won) {
+          stats.winsAgainst++;
+        } else {
+          stats.lossesAgainst++;
+        }
       }
     });
   });
@@ -129,14 +139,13 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
   let totalPointsReceived = 0;
 
   playerMatches.forEach(match => {
-    const isTeam1 = match.team1.includes(player.name);
-    if (isTeam1) {
-      totalPointsMade += match.team1Score;
-      totalPointsReceived += match.team2Score;
-    } else {
-      totalPointsMade += match.team2Score;
-      totalPointsReceived += match.team1Score;
-    }
+    const teamIndex = match.teams.findIndex(team => team.includes(player.name));
+    if (teamIndex < 0) return;
+    totalPointsMade += match.scores[teamIndex] ?? 0;
+    const received = match.scores
+      .filter((_, index) => index !== teamIndex)
+      .reduce((sum, score) => sum + (score ?? 0), 0);
+    totalPointsReceived += received;
   });
 
   // Get best and worst teammates/opponents

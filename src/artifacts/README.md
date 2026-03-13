@@ -70,9 +70,9 @@ interface Match {
   id: number;
   date: string;
   time: string;
-  team1: string[];
-  team2: string[];
-  winner: string;
+  teams: string[][];
+  scores: number[];
+  winnerIndex: number | null;
   eloChanges: { [playerName: string]: number };
 }
 ```

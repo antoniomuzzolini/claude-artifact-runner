@@ -184,6 +184,22 @@ export async function POST(req: NextRequest) {
     `;
 
     await sql`
+      ALTER TABLE matches 
+      ADD COLUMN IF NOT EXISTS teams JSONB;
+    `;
+
+    await sql`
+      ALTER TABLE matches 
+      ADD COLUMN IF NOT EXISTS scores INTEGER[];
+    `;
+
+    await sql`
+      ALTER TABLE matches 
+      ADD COLUMN IF NOT EXISTS winner_index INTEGER;
+    `;
+
+
+    await sql`
       ALTER TABLE players 
       ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);
     `;

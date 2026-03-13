@@ -16,7 +16,7 @@ import { useSettings } from '../hooks/useSettings';
 import { 
   findOrCreatePlayer, 
   validateMatch,
-  calculateELODifference
+  calculateMultiTeamEloChanges
 } from '../utils/gameLogic';
 
 // Import tab components
@@ -63,10 +63,8 @@ const ChampionshipManager = () => {
 
   // Local state for UI
   const [newMatch, setNewMatch] = useState<NewMatch>({
-    team1: [''],
-    team2: [''],
-    team1Score: 0,
-    team2Score: 0
+    teams: [[''], ['']],
+    scores: [0, 0]
   });
   const [activeTab, setActiveTab] = useState<'rankings' | 'new-match' | 'history' | 'seasons' | 'storage'>('rankings');
   const [matchFilterPlayer, setMatchFilterPlayer] = useState<string>('');
@@ -144,76 +142,48 @@ const ChampionshipManager = () => {
     }
 
     if (!validateMatch(
-      newMatch.team1,
-      newMatch.team2,
-      newMatch.team1Score,
-      newMatch.team2Score
+      newMatch.teams,
+      newMatch.scores
     )) {
-      alert('Fill in all fields and make sure the scores are different!');
+      alert('Fill in all fields, avoid duplicate players, and make sure there is a single winning team!');
       return;
     }
 
     // Find or create all players
-    const team1Players = newMatch.team1.map(name => 
-      findOrCreatePlayer(name, currentSeasonPlayers, setPlayers, organization.id, currentSeasonId)
+    const teamsPlayers = newMatch.teams.map(team =>
+      team.map(name =>
+        findOrCreatePlayer(name, currentSeasonPlayers, setPlayers, organization.id, currentSeasonId)
+      )
     );
-    const team2Players = newMatch.team2.map(name => 
-      findOrCreatePlayer(name, currentSeasonPlayers, setPlayers, organization.id, currentSeasonId)
+
+    const { winnerIndex, eloChanges } = calculateMultiTeamEloChanges(
+      teamsPlayers,
+      newMatch.scores
     );
 
-    // Get total points for the match
-    let totalPoints = newMatch.team1Score + newMatch.team2Score;
-    if (totalPoints === 0) totalPoints = 1;
-    const team1Won = newMatch.team1Score > newMatch.team2Score;
-    
-    // Calculate ELO changes for each player
-    const team1EloChanges: { [name: string]: number } = {};
-    const team2EloChanges: { [name: string]: number } = {};
-
-    let minTeamSize = Math.min(team1Players.length, team2Players.length);
-    if (minTeamSize === 0) minTeamSize = 1;
-
-    team1Players.forEach(player => {
-      if (!team1EloChanges[player.name]) team1EloChanges[player.name] = 0;
-      team2Players.forEach(opponent => {
-        if (!team2EloChanges[opponent.name]) team2EloChanges[opponent.name] = 0;
-        const newElo = Math.round(calculateELODifference(
-          player.elo,
-          opponent.elo,
-          newMatch.team1Score / totalPoints
-        ) / minTeamSize);
-        team1EloChanges[player.name] += newElo; // Average out ELO change across opponents
-        team2EloChanges[opponent.name] -= newElo; // Average out ELO change across opponents
+    // Update player stats
+    const involvedPlayersById = new Map<number, { teamIndex: number; name: string }>();
+    teamsPlayers.forEach((team, teamIndex) => {
+      team.forEach(player => {
+        involvedPlayersById.set(player.id, { teamIndex, name: player.name });
       });
     });
 
-    // Update player stats
     setPlayers(prev => prev.map(p => {
-      // Check if player is in team 1
-      const team1Player = team1Players.find(tp => tp.id === p.id);
-      if (team1Player) {
-        return {
-          ...p,
-          elo: p.elo + team1EloChanges[p.name],
-          matches: p.matches + 1,
-          wins: p.wins + (team1Won ? 1 : 0),
-          losses: p.losses + (team1Won ? 0 : 1)
-        };
-      }
-      
-      // Check if player is in team 2
-      const team2Player = team2Players.find(tp => tp.id === p.id);
-      if (team2Player) {
-        return {
-          ...p,
-          elo: p.elo + team2EloChanges[p.name],
-          matches: p.matches + 1,
-          wins: p.wins + (team1Won ? 0 : 1),
-          losses: p.losses + (team1Won ? 1 : 0)
-        };
-      }
-      
-      return p;
+      const entry = involvedPlayersById.get(p.id);
+      if (!entry) return p;
+
+      const didWin = winnerIndex !== null && entry.teamIndex === winnerIndex;
+      const isTie = winnerIndex === null;
+      const eloChange = eloChanges[entry.name] ?? 0;
+
+      return {
+        ...p,
+        elo: p.elo + eloChange,
+        matches: p.matches + 1,
+        wins: p.wins + (didWin ? 1 : 0),
+        losses: p.losses + (!isTie && !didWin ? 1 : 0)
+      };
     }));
 
     // Add match to history with creator tracking and organization
@@ -221,15 +191,10 @@ const ChampionshipManager = () => {
       id: Date.now(),
       date: new Date().toLocaleDateString('en-US'),
       time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-      team1: newMatch.team1.slice(), // Copy arrays
-      team2: newMatch.team2.slice(),
-      winner: team1Won ? 'team1' : 'team2',
-      team1Score: newMatch.team1Score,
-      team2Score: newMatch.team2Score,
-      eloChanges: {
-        ...team1EloChanges,
-        ...team2EloChanges
-      },
+      teams: newMatch.teams.map(team => team.slice()),
+      scores: newMatch.scores.slice(),
+      winnerIndex,
+      eloChanges,
       createdBy: user?.id,
       organization_id: organization.id,
       season_id: currentSeasonId
@@ -239,10 +204,8 @@ const ChampionshipManager = () => {
 
     // Reset form
     setNewMatch({
-      team1: [''],
-      team2: [''],
-      team1Score: 0,
-      team2Score: 0
+      teams: [[''], ['']],
+      scores: [0, 0]
     });
 
     alert('Match added successfully!');
@@ -251,8 +214,7 @@ const ChampionshipManager = () => {
   // Filter matches by player
   const filteredMatches = matchFilterPlayer 
     ? selectedSeasonMatches.filter(match => 
-        match.team1.includes(matchFilterPlayer) || 
-        match.team2.includes(matchFilterPlayer)
+        match.teams.some(team => team.includes(matchFilterPlayer))
       )
     : selectedSeasonMatches;
 
@@ -299,7 +261,11 @@ const ChampionshipManager = () => {
       alert('Past seasons are read-only. You cannot delete matches.');
       return;
     }
-    const confirmMessage = `Are you sure you want to delete this match?\n\nDate: ${match.date} ${match.time}\nTeams: ${match.team1.join(', ')} vs ${match.team2.join(', ')}\nScore: ${match.team1Score} - ${match.team2Score}`;
+    const teamsLabel = match.teams
+      .map((team, index) => `Team ${index + 1}: ${team.join(', ')}`)
+      .join(' vs ');
+    const scoreLabel = match.scores.join(' - ');
+    const confirmMessage = `Are you sure you want to delete this match?\n\nDate: ${match.date} ${match.time}\nTeams: ${teamsLabel}\nScore: ${scoreLabel}`;
     
     if (window.confirm(confirmMessage)) {
       const success = await deleteMatch(match.id);
@@ -376,6 +342,7 @@ const ChampionshipManager = () => {
     }
   };
 
+
   // Update document title with organization name
   useEffect(() => {
     document.title = organization?.name || 'Championship Manager';
@@ -416,47 +383,23 @@ const ChampionshipManager = () => {
 
       for (const match of sortedMatches) {
         // Find all players involved in this match
-        const team1Players = match.team1.map(name => 
-          currentPlayers.find(p => p.name === name)
-        ).filter(Boolean) as Player[];
-        
-        const team2Players = match.team2.map(name => 
-          currentPlayers.find(p => p.name === name)
-        ).filter(Boolean) as Player[];
+        const teamsPlayers = match.teams.map(team =>
+          team.map(name => currentPlayers.find(p => p.name === name)).filter(Boolean) as Player[]
+        );
 
         // Skip if any players are missing
-        if (team1Players.length !== match.team1.length || team2Players.length !== match.team2.length) {
+        const missingPlayers = teamsPlayers.some((team, index) => team.length !== match.teams[index].length);
+        if (missingPlayers) {
           continue;
         }
 
-        // Get total points for the match
-        let totalPoints = match.team1Score + match.team2Score;
-        if (totalPoints === 0) totalPoints = 1;
-        const team1Won = match.team1Score > match.team2Score;
-
-        // Calculate ELO changes for each player
-        const team1EloChanges: { [name: string]: number } = {};
-        const team2EloChanges: { [name: string]: number } = {};
-
-        let minTeamSize = Math.min(team1Players.length, team2Players.length);
-        if (minTeamSize === 0) minTeamSize = 1; // Avoid division by zero
-
-        team1Players.forEach(player => {
-          if (!team1EloChanges[player.name]) team1EloChanges[player.name] = 0;
-          team2Players.forEach(opponent => {
-            if (!team2EloChanges[opponent.name]) team2EloChanges[opponent.name] = 0;
-            const newElo = Math.round(calculateELODifference(
-              player.elo,
-              opponent.elo,
-              match.team1Score / totalPoints
-            ) / minTeamSize);
-            team1EloChanges[player.name] += newElo; // Average out ELO change across opponents
-            team2EloChanges[opponent.name] -= newElo; // Average out ELO change across opponents
-          });
-        });
+        const { winnerIndex, eloChanges } = calculateMultiTeamEloChanges(
+          teamsPlayers,
+          match.scores
+        );
 
         // Update player stats
-        const updatePlayerStats = (player: Player, eloChange: number, won: boolean) => {
+        const updatePlayerStats = (player: Player, eloChange: number, won: boolean, isTie = false) => {
           const playerIndex = currentPlayers.findIndex(p => p.id === player.id);
           if (playerIndex !== -1) {
             currentPlayers[playerIndex] = {
@@ -464,28 +407,24 @@ const ChampionshipManager = () => {
               elo: currentPlayers[playerIndex].elo + eloChange,
               matches: currentPlayers[playerIndex].matches + 1,
               wins: currentPlayers[playerIndex].wins + (won ? 1 : 0),
-              losses: currentPlayers[playerIndex].losses + (won ? 0 : 1)
+              losses: currentPlayers[playerIndex].losses + (!isTie && !won ? 1 : 0)
             };
           }
         };
 
-        // Update all team 1 players
-        team1Players.forEach(player => {
-          updatePlayerStats(player, team1EloChanges[player.name], team1Won);
-        });
-
-        // Update all team 2 players
-        team2Players.forEach(player => {
-          updatePlayerStats(player, team2EloChanges[player.name], !team1Won);
+        // Update all team players
+        teamsPlayers.forEach((team, teamIndex) => {
+          const didWin = winnerIndex !== null && teamIndex === winnerIndex;
+          const isTie = winnerIndex === null;
+          team.forEach(player => {
+            updatePlayerStats(player, eloChanges[player.name] ?? 0, didWin, isTie);
+          });
         });
 
         // Create updated match with new ELO changes
         const updatedMatch = {
           ...match,
-          eloChanges: {
-            ...team1EloChanges,
-            ...team2EloChanges
-          }
+          eloChanges
         };
 
         updatedMatches.push(updatedMatch);
