@@ -79,13 +79,8 @@ export const calculateMultiTeamEloChanges = (
   scores: number[]
 ) => {
   const winnerIndex = getWinnerIndex(scores);
-
-  const teamSizes = teams.map(team => team.length).filter(size => size > 0);
-  const minTeamSize = Math.max(1, Math.min(...teamSizes));
   const teamCount = teams.length;
   const teamDivisor = Math.max(1, teamCount - 1);
-  const divisor = minTeamSize * teamDivisor;
-
   const eloChanges: { [playerName: string]: number } = {};
 
   for (let i = 0; i < teams.length; i += 1) {
@@ -96,6 +91,8 @@ export const calculateMultiTeamEloChanges = (
       const scoreB = scores[j] ?? 0;
       const totalPairPoints = scoreA + scoreB || 1;
       const actualScoreA = scoreA / totalPairPoints;
+      const winTeamSize = Math.max(1, scoreA > scoreB ? teamA.length : teamB.length)
+      const divisor = winTeamSize * teamDivisor;
 
       teamA.forEach(player => {
         if (!eloChanges[player.name]) eloChanges[player.name] = 0;

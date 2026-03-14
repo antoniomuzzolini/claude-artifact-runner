@@ -15,6 +15,34 @@ export const useAuth = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
+  const syncAuthFromStorage = useCallback(() => {
+    const storedToken = localStorage.getItem('championship_token');
+    const storedUser = localStorage.getItem('championship_user');
+    const storedOrganization = localStorage.getItem('championship_organization');
+
+    if (storedToken && storedUser) {
+      try {
+        setToken(storedToken);
+        setUser(JSON.parse(storedUser));
+        if (storedOrganization) {
+          setOrganization(JSON.parse(storedOrganization));
+        } else {
+          setOrganization(null);
+        }
+        return;
+      } catch (error) {
+        console.error('Auth storage parse error:', error);
+      }
+    }
+
+    localStorage.removeItem('championship_token');
+    localStorage.removeItem('championship_user');
+    localStorage.removeItem('championship_organization');
+    setToken(null);
+    setUser(null);
+    setOrganization(null);
+  }, []);
+
   // Initialize auth from localStorage
   useEffect(() => {
     const initAuth = async () => {
@@ -68,6 +96,20 @@ export const useAuth = () => {
     initAuth();
   }, []);
 
+  useEffect(() => {
+    const handleAuthChange = () => {
+      syncAuthFromStorage();
+    };
+
+    window.addEventListener('auth:changed', handleAuthChange);
+    window.addEventListener('storage', handleAuthChange);
+
+    return () => {
+      window.removeEventListener('auth:changed', handleAuthChange);
+      window.removeEventListener('storage', handleAuthChange);
+    };
+  }, [syncAuthFromStorage]);
+
   const login = useCallback(async (credentials: LoginCredentials): Promise<boolean> => {
     setIsLoading(true);
     setError(null);
@@ -93,6 +135,7 @@ export const useAuth = () => {
         if (data.organization) {
           localStorage.setItem('championship_organization', JSON.stringify(data.organization));
         }
+        window.dispatchEvent(new Event('auth:changed'));
         
         // Update state
         setToken(data.token);
@@ -140,6 +183,7 @@ export const useAuth = () => {
         localStorage.setItem('championship_token', responseData.token);
         localStorage.setItem('championship_user', JSON.stringify(responseData.user));
         localStorage.setItem('championship_organization', JSON.stringify(responseData.organization));
+        window.dispatchEvent(new Event('auth:changed'));
         
         // Update state
         setToken(responseData.token);
@@ -171,6 +215,7 @@ export const useAuth = () => {
     setUser(null);
     setOrganization(null);
     setError(null);
+    window.dispatchEvent(new Event('auth:changed'));
   }, []);
 
   const refreshUser = useCallback(async () => {

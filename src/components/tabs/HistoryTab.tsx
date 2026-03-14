@@ -147,7 +147,10 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                   <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
                     ELO Changes
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div
+                    className="grid gap-2"
+                    style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}
+                  >
                     {match.teams.flat().map((playerName) => {
                       const change = match.eloChanges[playerName] ?? 0;
                       return (

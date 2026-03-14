@@ -1,12 +1,13 @@
 ﻿"use client";
 
-import React from 'react';
+import React, { useState } from 'react';
 import { X, Target, Users } from 'lucide-react';
 import { Player, Match } from '../types/championship';
 
 interface PlayerStatsModalProps {
   player: Player | null;
   matches: Match[];
+  minMatchesForRanking: number;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -30,9 +31,12 @@ interface OpponentStats {
 const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
   player,
   matches,
+  minMatchesForRanking,
   isOpen,
   onClose
 }) => {
+  const [hoveredEloIndex, setHoveredEloIndex] = useState<number | null>(null);
+
   if (!isOpen || !player) return null;
 
   // Get all matches for this player
@@ -149,10 +153,93 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
   });
 
   // Get best and worst teammates/opponents
-  const bestTeammate = sortedTeammates[0];
-  const worstTeammate = sortedTeammates[sortedTeammates.length - 1];
+  const findTeammatesByThreshold = (threshold: number) => {
+    if (sortedTeammates.length === 0) return [];
+    let currentThreshold = Math.max(1, Math.floor(threshold));
+    while (currentThreshold >= 1) {
+      const eligible = sortedTeammates.filter(stats => stats.total >= currentThreshold);
+      if (eligible.length > 0) return eligible;
+      currentThreshold -= 1;
+    }
+    return [];
+  };
+
+  const eligibleTeammates = findTeammatesByThreshold(minMatchesForRanking);
+  const bestTeammate = eligibleTeammates[0];
+  const worstTeammate = eligibleTeammates[eligibleTeammates.length - 1];
   const dominatedOpponent = sortedOpponents[0]; // Opponent we win against most
   const dominatingOpponent = sortedOpponents[sortedOpponents.length - 1]; // Opponent who beats us most
+
+  const sortedPlayerMatches = [...playerMatches].sort((a, b) => {
+    const dateA = new Date(`${a.date} ${a.time}`);
+    const dateB = new Date(`${b.date} ${b.time}`);
+    return dateA.getTime() - dateB.getTime();
+  });
+
+  const totalEloDelta = sortedPlayerMatches.reduce((sum, match) => {
+    return sum + (match.eloChanges[player.name] ?? 0);
+  }, 0);
+
+  const startingElo = player.elo - totalEloDelta;
+  let runningElo = startingElo;
+  const eloPoints = [
+    { label: 'Start', tooltip: 'Start season', value: startingElo }
+  ];
+
+  sortedPlayerMatches.forEach(match => {
+    runningElo += match.eloChanges[player.name] ?? 0;
+    const matchDate = new Date(`${match.date} ${match.time}`);
+    eloPoints.push({
+      label: matchDate.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short'
+      }),
+      tooltip: matchDate.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      }),
+      value: runningElo
+    });
+  });
+
+  const gradientId = `elo-gradient-${player.id}`;
+  const chartWidth = 600;
+  const chartHeight = 160;
+  const chartPadding = 24;
+  const eloValues = eloPoints.map(point => point.value);
+  const minElo = Math.min(...eloValues);
+  const maxElo = Math.max(...eloValues);
+  const eloRange = Math.max(1, maxElo - minElo);
+  const yTicks = 3;
+  const yTickValues = Array.from({ length: yTicks }, (_, index) => {
+    const t = index / (yTicks - 1);
+    return Math.round(maxElo - t * eloRange);
+  });
+  const chartPoints = eloPoints.map((point, index) => {
+    const xSpan = chartWidth - chartPadding * 2;
+    const ySpan = chartHeight - chartPadding * 2;
+    const x = chartPadding + (eloPoints.length <= 1 ? 0 : (index / (eloPoints.length - 1)) * xSpan);
+    const y = chartPadding + ((maxElo - point.value) / eloRange) * ySpan;
+    return { x, y };
+  });
+  const chartPath = chartPoints
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
+    .join(' ');
+  const netEloChange = eloPoints[eloPoints.length - 1].value - eloPoints[0].value;
+  const tooltipIndex = hoveredEloIndex !== null ? hoveredEloIndex : null;
+  const tooltipPoint = tooltipIndex !== null ? chartPoints[tooltipIndex] : null;
+  const tooltipText = tooltipIndex !== null
+    ? `${eloPoints[tooltipIndex].tooltip} · ELO ${eloPoints[tooltipIndex].value}`
+    : '';
+  const tooltipWidth = 160;
+  const tooltipHeight = 28;
+  const tooltipX = tooltipPoint
+    ? Math.min(chartWidth - chartPadding - tooltipWidth, Math.max(chartPadding, tooltipPoint.x + 10))
+    : 0;
+  const tooltipY = tooltipPoint
+    ? Math.max(chartPadding, tooltipPoint.y - 36)
+    : 0;
 
   return (
     <>
@@ -213,6 +300,138 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
                 <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{totalPointsReceived}</div>
                 <div className="text-sm text-yellow-600 dark:text-yellow-400 font-medium">Points Received</div>
               </div>
+            </div>
+
+            {/* ELO Trend Chart */}
+            <div className="bg-white dark:bg-gray-700 rounded-lg p-6 border dark:border-gray-600 shadow-sm mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">ELO Trend</h3>
+                <div className={`text-sm font-semibold ${
+                  netEloChange >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                }`}>
+                  {netEloChange >= 0 ? '+' : ''}{netEloChange} net
+                </div>
+              </div>
+
+              {eloPoints.length > 1 ? (
+                <>
+                  <div className="w-full">
+                    <svg
+                      width="100%"
+                      height={chartHeight}
+                      viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+                      className="overflow-visible"
+                      onMouseLeave={() => setHoveredEloIndex(null)}
+                    >
+                      <defs>
+                        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.2" />
+                          <stop offset="100%" stopColor="#3B82F6" stopOpacity="0.5" />
+                        </linearGradient>
+                      </defs>
+                      {yTickValues.map((value) => {
+                        const y = chartPadding + ((maxElo - value) / eloRange) * (chartHeight - chartPadding * 2);
+                        return (
+                          <g key={`y-tick-${value}`}>
+                            <line
+                              x1={chartPadding}
+                              x2={chartWidth - chartPadding}
+                              y1={y}
+                              y2={y}
+                              stroke="#E5E7EB"
+                              strokeDasharray="4 4"
+                            />
+                            <text
+                              x={chartPadding - 8}
+                              y={y + 4}
+                              fill="#6B7280"
+                              fontSize="10"
+                              textAnchor="end"
+                            >
+                              {value}
+                            </text>
+                          </g>
+                        );
+                      })}
+                      <path
+                        d={`${chartPath} L ${chartWidth - chartPadding} ${chartHeight - chartPadding} L ${chartPadding} ${chartHeight - chartPadding} Z`}
+                        fill={`url(#${gradientId})`}
+                      />
+                      <path
+                        d={chartPath}
+                        fill="none"
+                        stroke="#3B82F6"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      {tooltipPoint && (
+                        <g pointerEvents="none">
+                          <rect
+                            x={tooltipX}
+                            y={tooltipY}
+                            width={tooltipWidth}
+                            height={tooltipHeight}
+                            rx="6"
+                            fill="#111827"
+                            opacity="0.9"
+                          />
+                          <text
+                            x={tooltipX + 10}
+                            y={tooltipY + 18}
+                            fill="#F9FAFB"
+                            fontSize="12"
+                            fontWeight="600"
+                          >
+                            {tooltipText}
+                          </text>
+                        </g>
+                      )}
+                      {chartPoints.map((point, index) => (
+                        <circle
+                          key={`elo-point-${index}`}
+                          cx={point.x}
+                          cy={point.y}
+                          r="3.5"
+                          fill="#2563EB"
+                          stroke="#ffffff"
+                          strokeWidth="1.5"
+                          onMouseEnter={() => setHoveredEloIndex(index)}
+                          onFocus={() => setHoveredEloIndex(index)}
+                          onBlur={() => setHoveredEloIndex(null)}
+                          tabIndex={0}
+                        />
+                      ))}
+                      <text
+                        x={chartPadding}
+                        y={chartHeight - 6}
+                        fill="#6B7280"
+                        fontSize="10"
+                        textAnchor="start"
+                      >
+                        Start
+                      </text>
+                      <text
+                        x={chartWidth - chartPadding}
+                        y={chartHeight - 6}
+                        fill="#6B7280"
+                        fontSize="10"
+                        textAnchor="end"
+                      >
+                        Now
+                      </text>
+                    </svg>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                    <span>Start: {eloPoints[0].value}</span>
+                    <span>Min: {minElo}</span>
+                    <span>Max: {maxElo}</span>
+                    <span>Now: {eloPoints[eloPoints.length - 1].value}</span>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-gray-500 dark:text-gray-400">No matches yet to show an ELO trend.</p>
+              )}
             </div>
 
             {/* Key Relationships */}

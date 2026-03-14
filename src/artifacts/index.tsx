@@ -640,6 +640,7 @@ const ChampionshipManager = () => {
         <PlayerStatsModal
           player={selectedPlayerForStats}
           matches={selectedSeasonMatches}
+          minMatchesForRanking={minMatchesForRanking}
           isOpen={isPlayerStatsModalOpen}
           onClose={closePlayerStatsModal}
         />
