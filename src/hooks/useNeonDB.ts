@@ -42,6 +42,7 @@ export const useNeonDB = () => {
   const [isOnline, setIsOnline] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isAutoSaveEnabled, setIsAutoSaveEnabled] = useState<boolean>(true);
 
   // Save data directly to cloud database
   const saveData = useCallback(async () => {
@@ -393,10 +394,11 @@ export const useNeonDB = () => {
 
   // Auto-save when data changes (only if online and authenticated)
   useEffect(() => {
+    if (!isAutoSaveEnabled) return;
     if ((players.length > 0 || matches.length > 0) && isOnline && isAuthenticated) {
       saveData();
     }
-  }, [players, matches, isOnline, isAuthenticated, saveData]);
+  }, [players, matches, isOnline, isAuthenticated, saveData, isAutoSaveEnabled]);
 
   // Load data on mount when authenticated
   useEffect(() => {
@@ -413,11 +415,13 @@ export const useNeonDB = () => {
     lastSaved,
     isOnline,
     isSyncing,
+    isAutoSaveEnabled,
     error,
     setPlayers,
     setMatches,
     setSeasons,
     setCurrentSeasonId,
+    setIsAutoSaveEnabled,
     exportDataToFile,
     importDataFromFile,
     resetAll,

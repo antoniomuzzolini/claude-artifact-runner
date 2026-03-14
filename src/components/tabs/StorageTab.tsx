@@ -12,9 +12,11 @@ interface StorageTabProps {
   isSyncing: boolean;
   error: string | null;
   minMatchesForRanking: number;
+  eloKFactor: number;
   isSettingsLoading: boolean;
   isSettingsSaving: boolean;
   onUpdateMinMatchesForRanking: (value: number) => Promise<boolean>;
+  onUpdateEloKFactor: (value: number) => Promise<boolean>;
   currentSeason?: Season | null;
   onUpdateCurrentSeasonName?: (name: string) => Promise<boolean>;
   isSeasonSaving?: boolean;
@@ -23,6 +25,9 @@ interface StorageTabProps {
   onResetAll: () => void;
   onRefresh: () => Promise<void>;
   onRecalculateELO?: () => void;
+  onPreviewELO?: () => void;
+  onDiscardEloPreview?: () => void;
+  isEloPreviewActive?: boolean;
   isSuperuser?: boolean;
 }
 
@@ -34,9 +39,11 @@ const StorageTab: React.FC<StorageTabProps> = ({
   isSyncing,
   error,
   minMatchesForRanking,
+  eloKFactor,
   isSettingsLoading,
   isSettingsSaving,
   onUpdateMinMatchesForRanking,
+  onUpdateEloKFactor,
   currentSeason,
   onUpdateCurrentSeasonName,
   isSeasonSaving = false,
@@ -45,11 +52,17 @@ const StorageTab: React.FC<StorageTabProps> = ({
   onResetAll,
   onRefresh,
   onRecalculateELO,
+  onPreviewELO,
+  onDiscardEloPreview,
+  isEloPreviewActive = false,
   isSuperuser
 }) => {
   const [minMatchesInput, setMinMatchesInput] = useState<string>(String(minMatchesForRanking));
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
+  const [eloKFactorInput, setEloKFactorInput] = useState<string>(String(eloKFactor));
+  const [eloKFactorError, setEloKFactorError] = useState<string | null>(null);
+  const [eloKFactorMessage, setEloKFactorMessage] = useState<string | null>(null);
   const [seasonNameInput, setSeasonNameInput] = useState<string>(currentSeason?.name || '');
   const [seasonMessage, setSeasonMessage] = useState<string | null>(null);
   const [seasonError, setSeasonError] = useState<string | null>(null);
@@ -57,6 +70,10 @@ const StorageTab: React.FC<StorageTabProps> = ({
   useEffect(() => {
     setMinMatchesInput(String(minMatchesForRanking));
   }, [minMatchesForRanking]);
+
+  useEffect(() => {
+    setEloKFactorInput(String(eloKFactor));
+  }, [eloKFactor]);
 
   useEffect(() => {
     setSeasonNameInput(currentSeason?.name || '');
@@ -96,6 +113,22 @@ const StorageTab: React.FC<StorageTabProps> = ({
     setSeasonMessage('Season name updated.');
   };
 
+  const handleSaveEloKFactor = async () => {
+    const parsed = Number.parseInt(eloKFactorInput, 10);
+    if (Number.isNaN(parsed) || parsed < 1 || parsed > 100) {
+      setEloKFactorError('Please enter a valid number between 1 and 100.');
+      setEloKFactorMessage(null);
+      return;
+    }
+    setEloKFactorError(null);
+    setEloKFactorMessage(null);
+    const success = await onUpdateEloKFactor(parsed);
+    if (!success) {
+      setEloKFactorError('Failed to save ELO K-factor. Please try again.');
+      return;
+    }
+    setEloKFactorMessage('ELO K-factor saved.');
+  };
 
   return (
     <div className="space-y-6">
@@ -135,37 +168,73 @@ const StorageTab: React.FC<StorageTabProps> = ({
       {/* Ranking Settings */}
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border dark:border-gray-700 shadow-sm">
         <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Rankings Settings</h3>
-        <div className="flex flex-col gap-3">
-          <label className="text-sm text-gray-600 dark:text-gray-300">
-            Minimum matches required to appear in rankings
-          </label>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <input
-              type="number"
-              min={0}
-              step={1}
-              value={minMatchesInput}
-              onChange={(e) => setMinMatchesInput(e.target.value)}
-              className="w-full sm:w-40 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              disabled={isSettingsLoading || isSettingsSaving}
-            />
-            <button
-              onClick={handleSaveMinMatches}
-              disabled={isSettingsLoading || isSettingsSaving}
-              className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors duration-200 disabled:bg-gray-400 dark:disabled:bg-gray-600"
-            >
-              {isSettingsSaving ? 'Saving...' : 'Save'}
-            </button>
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-3">
+            <label className="text-sm text-gray-600 dark:text-gray-300">
+              ELO K-factor
+            </label>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <input
+                type="number"
+                min={1}
+                max={100}
+                step={1}
+                value={eloKFactorInput}
+                onChange={(e) => setEloKFactorInput(e.target.value)}
+                className="w-full sm:w-40 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                disabled={isSettingsLoading || isSettingsSaving}
+              />
+              <button
+                onClick={handleSaveEloKFactor}
+                disabled={isSettingsLoading || isSettingsSaving}
+                className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors duration-200 disabled:bg-gray-400 dark:disabled:bg-gray-600"
+              >
+                {isSettingsSaving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+            {eloKFactorError && (
+              <p className="text-sm text-red-600 dark:text-red-400">{eloKFactorError}</p>
+            )}
+            {eloKFactorMessage && (
+              <p className="text-sm text-green-600 dark:text-green-400">{eloKFactorMessage}</p>
+            )}
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Higher values make ratings change faster. Typical range is 16–40.
+            </p>
           </div>
-          {settingsError && (
-            <p className="text-sm text-red-600 dark:text-red-400">{settingsError}</p>
-          )}
-          {settingsMessage && (
-            <p className="text-sm text-green-600 dark:text-green-400">{settingsMessage}</p>
-          )}
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Players with fewer matches will be hidden from the rankings list.
-          </p>
+
+          <div className="flex flex-col gap-3">
+            <label className="text-sm text-gray-600 dark:text-gray-300">
+              Minimum matches required to appear in rankings
+            </label>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={minMatchesInput}
+                onChange={(e) => setMinMatchesInput(e.target.value)}
+                className="w-full sm:w-40 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                disabled={isSettingsLoading || isSettingsSaving}
+              />
+              <button
+                onClick={handleSaveMinMatches}
+                disabled={isSettingsLoading || isSettingsSaving}
+                className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors duration-200 disabled:bg-gray-400 dark:disabled:bg-gray-600"
+              >
+                {isSettingsSaving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+            {settingsError && (
+              <p className="text-sm text-red-600 dark:text-red-400">{settingsError}</p>
+            )}
+            {settingsMessage && (
+              <p className="text-sm text-green-600 dark:text-green-400">{settingsMessage}</p>
+            )}
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Players with fewer matches will be hidden from the rankings list.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -328,19 +397,50 @@ const StorageTab: React.FC<StorageTabProps> = ({
                   <li>Update all player rankings and match history</li>
                 </ul>
               </div>
-              
-              <button
-                onClick={() => {
-                  if (window.confirm('Are you sure you want to recalculate all ELO ratings? This will reset all current ELO values and recalculate from match history.')) {
-                    onRecalculateELO();
-                  }
-                }}
-                disabled={isSyncing || !isOnline || matches.length === 0}
-                className="flex items-center gap-2 py-2 px-4 bg-orange-600 dark:bg-orange-500 text-white rounded-md hover:bg-orange-700 dark:hover:bg-orange-600 transition-colors duration-200 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Recalculate ELO Ratings
-              </button>
+
+              <div className="flex flex-wrap items-center gap-3">
+                {onPreviewELO && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Preview ELO recalculation? Changes will NOT be saved to the database. Reloading the page will restore the original data.')) {
+                        onPreviewELO();
+                      }
+                    }}
+                    disabled={isSyncing || matches.length === 0}
+                    className="flex items-center gap-2 py-2 px-4 bg-slate-700 dark:bg-slate-600 text-white rounded-md hover:bg-slate-800 dark:hover:bg-slate-500 transition-colors duration-200 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Preview Recalculation
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    if (window.confirm('Are you sure you want to recalculate all ELO ratings? This will reset all current ELO values and recalculate from match history.')) {
+                      onRecalculateELO?.();
+                    }
+                  }}
+                  disabled={isSyncing || !isOnline || matches.length === 0}
+                  className="flex items-center gap-2 py-2 px-4 bg-orange-600 dark:bg-orange-500 text-white rounded-md hover:bg-orange-700 dark:hover:bg-orange-600 transition-colors duration-200 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Recalculate ELO Ratings
+                </button>
+                {isEloPreviewActive && onDiscardEloPreview && (
+                  <button
+                    onClick={onDiscardEloPreview}
+                    disabled={isSyncing}
+                    className="flex items-center gap-2 py-2 px-4 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors duration-200 disabled:bg-gray-200 dark:disabled:bg-gray-700 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                  >
+                    Discard Preview
+                  </button>
+                )}
+              </div>
+
+              {isEloPreviewActive && (
+                <p className="text-xs text-slate-600 dark:text-slate-300">
+                  Preview mode active. Changes are not saved to the database. Reload the page or discard the preview to restore original values.
+                </p>
+              )}
               
               {matches.length === 0 && (
                 <p className="text-xs text-gray-500 dark:text-gray-400">

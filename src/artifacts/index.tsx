@@ -37,9 +37,11 @@ const ChampionshipManager = () => {
   const { user, organization, makeAuthenticatedRequest } = useAuth();
   const {
     minMatchesForRanking,
+    eloKFactor,
     isLoading: isSettingsLoading,
     isSaving: isSettingsSaving,
-    updateMinMatchesForRanking
+    updateMinMatchesForRanking,
+    updateEloKFactor
   } = useSettings();
   
   // Use the simplified cloud-only data management
@@ -51,9 +53,11 @@ const ChampionshipManager = () => {
     lastSaved,
     isOnline,
     isSyncing,
+    isAutoSaveEnabled,
     error,
     setPlayers,
     setMatches,
+    setIsAutoSaveEnabled,
     exportDataToFile,
     importDataFromFile,
     resetAll,
@@ -71,6 +75,7 @@ const ChampionshipManager = () => {
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null);
   const [isSeasonSaving, setIsSeasonSaving] = useState(false);
   const [isSeasonCreating, setIsSeasonCreating] = useState(false);
+  const [isEloPreviewActive, setIsEloPreviewActive] = useState(false);
   
   // Player stats modal state
   const [selectedPlayerForStats, setSelectedPlayerForStats] = useState<Player | null>(null);
@@ -158,7 +163,8 @@ const ChampionshipManager = () => {
 
     const { winnerIndex, eloChanges } = calculateMultiTeamEloChanges(
       teamsPlayers,
-      newMatch.scores
+      newMatch.scores,
+      eloKFactor
     );
 
     // Update player stats
@@ -348,18 +354,31 @@ const ChampionshipManager = () => {
     document.title = organization?.name || 'Championship Manager';
   }, [organization?.name]);
 
+  const setPreviewMode = (enabled: boolean) => {
+    setIsEloPreviewActive(enabled);
+    if (enabled) {
+      if (isAutoSaveEnabled) setIsAutoSaveEnabled(false);
+    } else if (!isAutoSaveEnabled) {
+      setIsAutoSaveEnabled(true);
+    }
+  };
+
   // Recalculate ELO from scratch (superuser only)
-  const recalculateELO = async () => {
-    if (!organization || !currentSeasonId) return;
+  const recalculateELO = async (options?: { preview?: boolean }) => {
+    if (!organization || !effectiveSeasonId) return;
+    const isPreview = options?.preview ?? false;
 
     try {
-      const seasonPlayers = currentSeasonPlayers;
-      const seasonMatches = currentSeasonMatches;
+      const seasonId = effectiveSeasonId;
+      const seasonPlayers = selectedSeasonPlayers;
+      const seasonMatches = selectedSeasonMatches;
 
       if (seasonPlayers.length === 0 || seasonMatches.length === 0) {
         alert('No matches available to recalculate for the current season.');
         return;
       }
+
+      setPreviewMode(isPreview);
 
       // Create a copy of season players and reset their ELO to 1200
       const resetPlayers = seasonPlayers.map(player => ({
@@ -395,7 +414,8 @@ const ChampionshipManager = () => {
 
         const { winnerIndex, eloChanges } = calculateMultiTeamEloChanges(
           teamsPlayers,
-          match.scores
+          match.scores,
+          eloKFactor
         );
 
         // Update player stats
@@ -435,19 +455,32 @@ const ChampionshipManager = () => {
 
       // Update state with recalculated data (current season only)
       setPlayers(prev => prev.map(player => {
-        if (player.season_id !== currentSeasonId) return player;
+        if (player.season_id !== seasonId) return player;
         return updatedPlayersById.get(player.id) || player;
       }));
       setMatches(prev => prev.map(match => {
-        if (match.season_id !== currentSeasonId) return match;
+        if (match.season_id !== seasonId) return match;
         return updatedMatchesById.get(match.id) || match;
       }));
 
-      alert(`ELO recalculation complete! Processed ${updatedMatches.length} matches.`);
+      if (isPreview) {
+        alert(`ELO preview complete! Processed ${updatedMatches.length} matches. Changes were NOT saved.`);
+      } else {
+        alert(`ELO recalculation complete! Processed ${updatedMatches.length} matches.`);
+      }
     } catch (error) {
       console.error('ELO recalculation error:', error);
       alert('Failed to recalculate ELO. Please try again.');
     }
+  };
+
+  const previewELO = async () => {
+    await recalculateELO({ preview: true });
+  };
+
+  const discardEloPreview = async () => {
+    setPreviewMode(false);
+    await refreshData();
   };
 
   return (
@@ -619,9 +652,11 @@ const ChampionshipManager = () => {
                 isSyncing={isSyncing}
                 error={error}
                 minMatchesForRanking={minMatchesForRanking}
+                eloKFactor={eloKFactor}
                 isSettingsLoading={isSettingsLoading}
                 isSettingsSaving={isSettingsSaving}
                 onUpdateMinMatchesForRanking={updateMinMatchesForRanking}
+                onUpdateEloKFactor={updateEloKFactor}
                 currentSeason={currentSeason}
                 onUpdateCurrentSeasonName={handleUpdateCurrentSeasonName}
                 isSeasonSaving={isSeasonSaving}
@@ -629,7 +664,10 @@ const ChampionshipManager = () => {
                 onImportData={handleImportFile}
                 onResetAll={resetAll}
                 onRefresh={refreshData}
-                onRecalculateELO={recalculateELO}
+                onRecalculateELO={() => recalculateELO({ preview: false })}
+                onPreviewELO={previewELO}
+                onDiscardEloPreview={discardEloPreview}
+                isEloPreviewActive={isEloPreviewActive}
                 isSuperuser={user?.role === 'superuser'}
               />
             )}
