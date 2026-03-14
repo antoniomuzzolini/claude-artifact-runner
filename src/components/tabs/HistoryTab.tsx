@@ -83,9 +83,9 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
             {matchFilterPlayerId !== null && ` for ${selectedPlayerName}`}
           </div>
           
-          {filteredMatches.map((match) => (
+          {filteredMatches.map((match, index) => (
             <div
-              key={match.id}
+              key={`${match.id}-${match.date}-${match.time}-${index}`}
               className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
             >
               {/* Match Header */}

@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
     const players = await sql`
       SELECT * FROM players 
       WHERE organization_id = ${currentUser.organizationId}
-      ORDER BY elo DESC
+      ORDER BY name ASC
     `;
     return jsonResponse(players);
   } catch (error) {
@@ -74,15 +74,10 @@ export async function POST(req: NextRequest) {
 
     for (const player of playersData) {
       await sql`
-        INSERT INTO players (id, name, elo, matches, wins, losses, organization_id, season_id)
-        VALUES (${player.id}, ${player.name}, ${player.elo}, ${player.matches}, ${player.wins}, ${player.losses}, ${currentUser.organizationId}, ${player.season_id || null})
+        INSERT INTO players (id, name, organization_id)
+        VALUES (${player.id}, ${player.name}, ${currentUser.organizationId})
         ON CONFLICT (id) DO UPDATE SET
-          name = EXCLUDED.name,
-          elo = EXCLUDED.elo,
-          matches = EXCLUDED.matches,
-          wins = EXCLUDED.wins,
-          losses = EXCLUDED.losses,
-          season_id = EXCLUDED.season_id
+          name = EXCLUDED.name
         WHERE players.organization_id = ${currentUser.organizationId}
       `;
     }

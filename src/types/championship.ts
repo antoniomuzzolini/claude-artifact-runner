@@ -16,7 +16,6 @@ export interface Player {
   wins: number;
   losses: number;
   organization_id: number;
-  season_id: number;
 }
 
 export interface MatchTeamPlayer {

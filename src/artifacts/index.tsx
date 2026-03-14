@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Trophy, PlusCircle, BarChart3, Settings, Calendar, AlertTriangle, Users } from 'lucide-react';
 
 // Import types
@@ -18,6 +18,7 @@ import {
   validateMatch,
   calculateMultiTeamEloChanges
 } from '../utils/gameLogic';
+import { buildPlayerStats } from '../utils/playerStats';
 
 // Import tab components
 import RankingsTab from '../components/tabs/RankingsTab';
@@ -85,18 +86,21 @@ const ChampionshipManager = () => {
   const normalizeName = (name: string) => name.trim().toLowerCase();
 
   const effectiveSeasonId = selectedSeasonId ?? currentSeasonId;
-  const selectedSeasonPlayers = effectiveSeasonId
-    ? players.filter(player => player.season_id === effectiveSeasonId)
-    : [];
-  const selectedSeasonMatches = effectiveSeasonId
-    ? matches.filter(match => match.season_id === effectiveSeasonId)
-    : [];
-  const currentSeasonPlayers = currentSeasonId
-    ? players.filter(player => player.season_id === currentSeasonId)
-    : [];
-  const currentSeasonMatches = currentSeasonId
-    ? matches.filter(match => match.season_id === currentSeasonId)
-    : [];
+  const selectedSeasonMatches = useMemo(() => (
+    effectiveSeasonId
+      ? matches.filter(match => match.season_id === effectiveSeasonId)
+      : []
+  ), [matches, effectiveSeasonId]);
+
+  const selectedSeasonPlayers = useMemo(() => (
+    effectiveSeasonId
+      ? buildPlayerStats(players, matches, effectiveSeasonId)
+      : []
+  ), [players, matches, effectiveSeasonId]);
+
+  const allTimePlayers = useMemo(() => (
+    buildPlayerStats(players, matches, null)
+  ), [players, matches]);
   const isViewingCurrentSeason = !!currentSeasonId && effectiveSeasonId === currentSeasonId;
   const currentSeason = seasons.find(season => season.id === currentSeasonId) || null;
   const seasonOptions = [...seasons].sort((a, b) => {
@@ -157,11 +161,21 @@ const ChampionshipManager = () => {
       return;
     }
 
-    // Find or create all players
+    const seasonStatsById = new Map(selectedSeasonPlayers.map(player => [player.id, player]));
+
+    // Find or create all players (global), then map to current season stats
     const teamsPlayers = newMatch.teams.map(team =>
-      team.map(name =>
-        findOrCreatePlayer(name, currentSeasonPlayers, setPlayers, organization.id, currentSeasonId)
-      )
+      team.map(name => {
+        const basePlayer = findOrCreatePlayer(name, players, setPlayers, organization.id);
+        const seasonPlayer = seasonStatsById.get(basePlayer.id);
+        return seasonPlayer ?? {
+          ...basePlayer,
+          elo: 1200,
+          matches: 0,
+          wins: 0,
+          losses: 0
+        };
+      })
     );
 
     const { winnerIndex, eloChanges } = calculateMultiTeamEloChanges(
@@ -170,34 +184,15 @@ const ChampionshipManager = () => {
       eloKFactor
     );
 
-    // Update player stats
-    const involvedPlayersById = new Map<number, { teamIndex: number; name: string }>();
-    teamsPlayers.forEach((team, teamIndex) => {
-      team.forEach(player => {
-        involvedPlayersById.set(player.id, { teamIndex, name: player.name });
-      });
-    });
-
-    setPlayers(prev => prev.map(p => {
-      const entry = involvedPlayersById.get(p.id);
-      if (!entry) return p;
-
-      const didWin = winnerIndex !== null && entry.teamIndex === winnerIndex;
-      const isTie = winnerIndex === null;
-      const eloChange = eloChanges[String(p.id)] ?? 0;
-
-      return {
-        ...p,
-        elo: p.elo + eloChange,
-        matches: p.matches + 1,
-        wins: p.wins + (didWin ? 1 : 0),
-        losses: p.losses + (!isTie && !didWin ? 1 : 0)
-      };
-    }));
-
     // Add match to history with creator tracking and organization
+    let matchId = Date.now() + Math.floor(Math.random() * 1000);
+    const existingMatchIds = new Set(matches.map(match => match.id));
+    while (existingMatchIds.has(matchId)) {
+      matchId += Math.floor(Math.random() * 1000) + 1;
+    }
+
     const match: Match = {
-      id: Date.now(),
+      id: matchId,
       date: new Date().toLocaleDateString('en-US'),
       time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
       teams: teamsPlayers.map(team =>
@@ -303,11 +298,10 @@ const ChampionshipManager = () => {
 
     const hasDuplicate = players.some(player => (
       player.id !== playerId
-      && player.season_id === targetPlayer.season_id
       && normalizeName(player.name) === normalizeName(trimmed)
     ));
     if (hasDuplicate) {
-      return { success: false, error: 'Another player in this season already has that name.' };
+      return { success: false, error: 'Another player already has that name.' };
     }
 
     setPlayers(prev => prev.map(player => (
@@ -509,14 +503,9 @@ const ChampionshipManager = () => {
         updatedMatches.push(updatedMatch);
       }
 
-      const updatedPlayersById = new Map(currentPlayers.map(player => [player.id, player]));
       const updatedMatchesById = new Map(updatedMatches.map(match => [match.id, match]));
 
       // Update state with recalculated data (current season only)
-      setPlayers(prev => prev.map(player => {
-        if (player.season_id !== seasonId) return player;
-        return updatedPlayersById.get(player.id) || player;
-      }));
       setMatches(prev => prev.map(match => {
         if (match.season_id !== seasonId) return match;
         return updatedMatchesById.get(match.id) || match;
@@ -669,7 +658,7 @@ const ChampionshipManager = () => {
                   </div>
                 ) : (
                   <NewMatchTab
-                    players={selectedSeasonPlayers}
+                    players={allTimePlayers}
                     newMatch={newMatch}
                     setNewMatch={setNewMatch}
                     onAddMatch={addMatch}
@@ -694,6 +683,7 @@ const ChampionshipManager = () => {
               <SeasonsTab
                 seasons={seasons}
                 players={players}
+                matches={matches}
                 minMatchesForRanking={minMatchesForRanking}
                 currentSeasonId={currentSeasonId}
                 selectedSeasonId={effectiveSeasonId}
@@ -705,8 +695,7 @@ const ChampionshipManager = () => {
             )}
             {activeTab === 'players' && user?.role === 'superuser' && (
               <PlayersTab
-                players={players}
-                seasons={seasons}
+                players={allTimePlayers}
                 onRenamePlayer={handleRenamePlayer}
               />
             )}

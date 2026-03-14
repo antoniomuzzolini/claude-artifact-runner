@@ -53,7 +53,6 @@ async function ensureSeasonsSchema() {
     );
   `;
 
-  await sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS season_id BIGINT;`;
   await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS season_id BIGINT;`;
 }
 
@@ -98,18 +97,11 @@ async function ensureCurrentSeason(organizationId: number) {
 }
 
 async function backfillSeasonIds(organizationId: number, seasonId: number) {
-  await Promise.all([
-    sql`
-      UPDATE players
-      SET season_id = ${seasonId}
-      WHERE organization_id = ${organizationId} AND season_id IS NULL
-    `,
-    sql`
-      UPDATE matches
-      SET season_id = ${seasonId}
-      WHERE organization_id = ${organizationId} AND season_id IS NULL
-    `
-  ]);
+  await sql`
+    UPDATE matches
+    SET season_id = ${seasonId}
+    WHERE organization_id = ${organizationId} AND season_id IS NULL
+  `;
 }
 
 export async function GET(req: NextRequest) {

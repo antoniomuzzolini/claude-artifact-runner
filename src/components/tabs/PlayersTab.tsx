@@ -1,46 +1,30 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pencil, Save, X, Users } from 'lucide-react';
-import { Player, Season } from '../../types/championship';
+import { Player } from '../../types/championship';
 
 interface PlayersTabProps {
   players: Player[];
-  seasons: Season[];
   onRenamePlayer: (playerId: number, newName: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const PlayersTab: React.FC<PlayersTabProps> = ({
   players,
-  seasons,
   onRenamePlayer
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [seasonFilter, setSeasonFilter] = useState<number | 'all'>('all');
   const [editingPlayerId, setEditingPlayerId] = useState<number | null>(null);
   const [draftName, setDraftName] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    if (seasonFilter === 'all') return;
-    const stillExists = seasons.some(season => season.id === seasonFilter);
-    if (!stillExists) {
-      setSeasonFilter('all');
-    }
-  }, [seasonFilter, seasons]);
-
-  const seasonsById = useMemo(() => {
-    return new Map(seasons.map(season => [season.id, season]));
-  }, [seasons]);
-
   const filteredPlayers = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
     return [...players]
-      .filter(player => (seasonFilter === 'all' ? true : player.season_id === seasonFilter))
       .filter(player => (search ? player.name.toLowerCase().includes(search) : true))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [players, searchTerm, seasonFilter]);
+  }, [players, searchTerm]);
 
   const handleStartEdit = (player: Player) => {
     setEditingPlayerId(player.id);
@@ -79,25 +63,6 @@ const PlayersTab: React.FC<PlayersTabProps> = ({
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Season</label>
-          <select
-            value={seasonFilter}
-            onChange={(e) => {
-              const value = e.target.value;
-              setSeasonFilter(value === 'all' ? 'all' : Number(value));
-            }}
-            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">All seasons</option>
-            {seasons.map(season => (
-              <option key={season.id} value={season.id}>
-                {season.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex items-center gap-2">
           <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Search</label>
           <input
             value={searchTerm}
@@ -124,8 +89,6 @@ const PlayersTab: React.FC<PlayersTabProps> = ({
             <thead className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
               <tr>
                 <th className="text-left px-4 py-3 font-semibold">Name</th>
-                <th className="text-left px-4 py-3 font-semibold">Season</th>
-                <th className="text-right px-4 py-3 font-semibold">ELO</th>
                 <th className="text-right px-4 py-3 font-semibold">Matches</th>
                 <th className="text-right px-4 py-3 font-semibold">Actions</th>
               </tr>
@@ -133,7 +96,6 @@ const PlayersTab: React.FC<PlayersTabProps> = ({
             <tbody>
               {filteredPlayers.map(player => {
                 const isEditing = editingPlayerId === player.id;
-                const seasonName = seasonsById.get(player.season_id)?.name ?? 'Unknown season';
                 return (
                   <tr key={player.id} className="border-b border-gray-200 dark:border-gray-700">
                     <td className="px-4 py-3">
@@ -147,8 +109,6 @@ const PlayersTab: React.FC<PlayersTabProps> = ({
                         <span className="font-medium text-gray-900 dark:text-white">{player.name}</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{seasonName}</td>
-                    <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">{player.elo}</td>
                     <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-200">{player.matches}</td>
                     <td className="px-4 py-3 text-right">
                       {isEditing ? (

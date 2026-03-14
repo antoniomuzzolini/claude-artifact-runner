@@ -19,27 +19,31 @@ export const findOrCreatePlayer = (
   name: string,
   players: Player[],
   setPlayers: React.Dispatch<React.SetStateAction<Player[]>>,
-  organizationId: number,
-  seasonId: number
+  organizationId: number
 ): Player => {
   const normalized = normalizeName(name);
   const existingPlayer = players.find(player => (
-    normalizeName(player.name) === normalized && player.season_id === seasonId
+    normalizeName(player.name) === normalized
   ));
   
   if (existingPlayer) {
     return existingPlayer;
   }
   
+  const existingIds = new Set(players.map(player => player.id));
+  let newId = Date.now() + Math.floor(Math.random() * 1000);
+  while (existingIds.has(newId)) {
+    newId += Math.floor(Math.random() * 1000) + 1;
+  }
+
   const newPlayer: Player = {
-    id: Date.now() + Math.floor(Math.random() * 1000),
+    id: newId,
     name: name.trim(),
     elo: DEFAULT_ELO,
     matches: 0,
     wins: 0,
     losses: 0,
-    organization_id: organizationId,
-    season_id: seasonId
+    organization_id: organizationId
   };
   
   setPlayers(prev => [...prev, newPlayer]);

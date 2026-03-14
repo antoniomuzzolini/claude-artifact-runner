@@ -2,11 +2,13 @@
 
 import React from 'react';
 import { Trophy, Calendar, PlusCircle } from 'lucide-react';
-import { Player, Season } from '../../types/championship';
+import { Match, Player, Season } from '../../types/championship';
+import { buildPlayerStats } from '../../utils/playerStats';
 
 interface SeasonsTabProps {
   seasons: Season[];
   players: Player[];
+  matches: Match[];
   minMatchesForRanking: number;
   currentSeasonId: number | null;
   selectedSeasonId: number | null;
@@ -25,6 +27,7 @@ const formatDateRange = (season: Season) => {
 const SeasonsTab: React.FC<SeasonsTabProps> = ({
   seasons,
   players,
+  matches,
   minMatchesForRanking,
   currentSeasonId,
   selectedSeasonId,
@@ -69,7 +72,8 @@ const SeasonsTab: React.FC<SeasonsTabProps> = ({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {sortedSeasons.map((season) => {
-            const seasonPlayers = players.filter(p => p.season_id === season.id);
+            const seasonPlayers = buildPlayerStats(players, matches, season.id);
+            const seasonParticipants = seasonPlayers.filter(player => player.matches > 0);
             const podium = seasonPlayers
               .filter(p => p.matches >= minMatchesForRanking)
               .sort((a, b) => b.elo - a.elo)
@@ -103,7 +107,7 @@ const SeasonsTab: React.FC<SeasonsTabProps> = ({
                     </div>
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">
-                    {seasonPlayers.length} players
+                    {seasonParticipants.length} players
                   </div>
                 </div>
 

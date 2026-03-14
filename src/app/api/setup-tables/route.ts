@@ -79,12 +79,7 @@ export async function POST() {
       CREATE TABLE IF NOT EXISTS players (
         id BIGINT PRIMARY KEY,
         name VARCHAR(255) UNIQUE NOT NULL,
-        elo INTEGER DEFAULT 1200,
-        matches INTEGER DEFAULT 0,
-        wins INTEGER DEFAULT 0,
-        losses INTEGER DEFAULT 0,
         organization_id INTEGER,
-        season_id BIGINT,
         created_at TIMESTAMP DEFAULT NOW()
       );
     `;
