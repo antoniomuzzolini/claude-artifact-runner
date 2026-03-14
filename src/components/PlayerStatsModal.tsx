@@ -13,6 +13,7 @@ interface PlayerStatsModalProps {
 }
 
 interface TeammateStats {
+  id: number;
   name: string;
   wins: number;
   losses: number;
@@ -21,6 +22,7 @@ interface TeammateStats {
 }
 
 interface OpponentStats {
+  id: number;
   name: string;
   winsAgainst: number;
   lossesAgainst: number;
@@ -41,25 +43,25 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
 
   // Get all matches for this player
   const playerMatches = matches.filter(match => 
-    match.teams.some(team => team.includes(player.name))
+    match.teams.some(team => team.some(member => member.id === player.id))
   );
 
   // Calculate teammate statistics
-  const teammateStats = new Map<string, { wins: number; losses: number }>();
+  const teammateStats = new Map<number, { name: string; wins: number; losses: number }>();
   
   playerMatches.forEach(match => {
-    const teamIndex = match.teams.findIndex(team => team.includes(player.name));
+    const teamIndex = match.teams.findIndex(team => team.some(member => member.id === player.id));
     if (teamIndex < 0) return;
     const teammates = match.teams[teamIndex] || [];
     const won = match.winnerIndex !== null && match.winnerIndex === teamIndex;
     const isTie = match.winnerIndex === null;
     
     teammates.forEach(teammate => {
-      if (teammate !== player.name) {
-        if (!teammateStats.has(teammate)) {
-          teammateStats.set(teammate, { wins: 0, losses: 0 });
+      if (teammate.id !== player.id) {
+        if (!teammateStats.has(teammate.id)) {
+          teammateStats.set(teammate.id, { name: teammate.name, wins: 0, losses: 0 });
         }
-        const stats = teammateStats.get(teammate)!;
+        const stats = teammateStats.get(teammate.id)!;
         if (!isTie) {
           if (won) {
             stats.wins++;
@@ -72,10 +74,10 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
   });
 
   // Calculate opponent statistics
-  const opponentStats = new Map<string, { winsAgainst: number; lossesAgainst: number }>();
+  const opponentStats = new Map<number, { name: string; winsAgainst: number; lossesAgainst: number }>();
   
   playerMatches.forEach(match => {
-    const teamIndex = match.teams.findIndex(team => team.includes(player.name));
+    const teamIndex = match.teams.findIndex(team => team.some(member => member.id === player.id));
     if (teamIndex < 0) return;
     const opponents = match.teams
       .filter((_, index) => index !== teamIndex)
@@ -84,10 +86,10 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
     const isTie = match.winnerIndex === null;
     
     opponents.forEach(opponent => {
-      if (!opponentStats.has(opponent)) {
-        opponentStats.set(opponent, { winsAgainst: 0, lossesAgainst: 0 });
+      if (!opponentStats.has(opponent.id)) {
+        opponentStats.set(opponent.id, { name: opponent.name, winsAgainst: 0, lossesAgainst: 0 });
       }
-      const stats = opponentStats.get(opponent)!;
+      const stats = opponentStats.get(opponent.id)!;
       if (!isTie) {
         if (won) {
           stats.winsAgainst++;
@@ -100,8 +102,9 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
 
   // Convert to arrays and sort
   const sortedTeammates: TeammateStats[] = Array.from(teammateStats.entries())
-    .map(([name, stats]) => ({
-      name,
+    .map(([id, stats]) => ({
+      id,
+      name: stats.name,
       wins: stats.wins,
       losses: stats.losses,
       total: stats.wins + stats.losses,
@@ -118,8 +121,9 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
     });
 
   const sortedOpponents: OpponentStats[] = Array.from(opponentStats.entries())
-    .map(([name, stats]) => ({
-      name,
+    .map(([id, stats]) => ({
+      id,
+      name: stats.name,
       winsAgainst: stats.winsAgainst,
       lossesAgainst: stats.lossesAgainst,
       total: stats.winsAgainst + stats.lossesAgainst,
@@ -143,7 +147,7 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
   let totalPointsReceived = 0;
 
   playerMatches.forEach(match => {
-    const teamIndex = match.teams.findIndex(team => team.includes(player.name));
+    const teamIndex = match.teams.findIndex(team => team.some(member => member.id === player.id));
     if (teamIndex < 0) return;
     totalPointsMade += match.scores[teamIndex] ?? 0;
     const received = match.scores
@@ -177,7 +181,7 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
   });
 
   const totalEloDelta = sortedPlayerMatches.reduce((sum, match) => {
-    return sum + (match.eloChanges[player.name] ?? 0);
+    return sum + (match.eloChanges[String(player.id)] ?? 0);
   }, 0);
 
   const startingElo = player.elo - totalEloDelta;
@@ -187,7 +191,7 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
   ];
 
   sortedPlayerMatches.forEach(match => {
-    runningElo += match.eloChanges[player.name] ?? 0;
+    runningElo += match.eloChanges[String(player.id)] ?? 0;
     const matchDate = new Date(`${match.date} ${match.time}`);
     eloPoints.push({
       label: matchDate.toLocaleDateString('en-GB', {
@@ -544,7 +548,7 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
                     <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 max-h-64 overflow-y-auto">
                       <div className="space-y-2">
                         {sortedTeammates.map((teammate, index) => (
-                          <div key={teammate.name} className="flex items-center justify-between py-2 px-3 bg-white dark:bg-gray-700 rounded border dark:border-gray-600">
+                          <div key={teammate.id} className="flex items-center justify-between py-2 px-3 bg-white dark:bg-gray-700 rounded border dark:border-gray-600">
                             <div className="flex items-center gap-2">
                               <span className="text-xs text-gray-500 dark:text-gray-400 w-6">#{index + 1}</span>
                               <span className="font-medium text-gray-900 dark:text-white">{teammate.name}</span>
@@ -574,7 +578,7 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
                     <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 max-h-64 overflow-y-auto">
                       <div className="space-y-2">
                         {sortedOpponents.map((opponent, index) => (
-                          <div key={opponent.name} className="flex items-center justify-between py-2 px-3 bg-white dark:bg-gray-700 rounded border dark:border-gray-600">
+                          <div key={opponent.id} className="flex items-center justify-between py-2 px-3 bg-white dark:bg-gray-700 rounded border dark:border-gray-600">
                             <div className="flex items-center gap-2">
                               <span className="text-xs text-gray-500 dark:text-gray-400 w-6">#{index + 1}</span>
                               <span className="font-medium text-gray-900 dark:text-white">{opponent.name}</span>

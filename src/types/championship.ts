@@ -19,14 +19,19 @@ export interface Player {
   season_id: number;
 }
 
+export interface MatchTeamPlayer {
+  id: number;
+  name: string;
+}
+
 export interface Match {
   id: number;
   date: string;
   time: string;
-  teams: string[][];
+  teams: MatchTeamPlayer[][];
   scores: number[];
   winnerIndex: number | null;
-  eloChanges: { [playerName: string]: number };
+  eloChanges: { [playerId: string]: number };
   createdBy?: number; // User ID who created the match
   organization_id: number;
   season_id: number;

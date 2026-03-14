@@ -7,8 +7,8 @@ import { Player } from '../../types/championship';
 interface RankingsTabProps {
   players: Player[];
   minMatchesForRanking: number;
-  onPlayerClick?: (playerName: string) => void;
-  onPlayerStatsClick?: (playerName: string) => void;
+  onPlayerClick?: (playerId: number) => void;
+  onPlayerStatsClick?: (playerId: number) => void;
 }
 
 const RankingsTab: React.FC<RankingsTabProps> = ({ players, minMatchesForRanking, onPlayerClick, onPlayerStatsClick }) => {
@@ -111,7 +111,7 @@ const RankingsTab: React.FC<RankingsTabProps> = ({ players, minMatchesForRanking
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          onPlayerStatsClick(player.name);
+                          onPlayerStatsClick(player.id);
                         }}
                         className="flex-1 px-3 py-2 bg-blue-600 dark:bg-blue-500 text-white text-sm rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors duration-200 font-medium"
                       >
@@ -122,7 +122,7 @@ const RankingsTab: React.FC<RankingsTabProps> = ({ players, minMatchesForRanking
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          onPlayerClick(player.name);
+                          onPlayerClick(player.id);
                         }}
                         className="flex-1 px-3 py-2 bg-gray-600 dark:bg-gray-500 text-white text-sm rounded-md hover:bg-gray-700 dark:hover:bg-gray-600 transition-colors duration-200 font-medium"
                       >

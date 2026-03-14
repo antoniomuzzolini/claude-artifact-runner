@@ -89,7 +89,7 @@ export const calculateMultiTeamEloChanges = (
   const winnerIndex = getWinnerIndex(scores);
   const teamCount = teams.length;
   const teamDivisor = Math.max(1, teamCount - 1);
-  const eloChanges: { [playerName: string]: number } = {};
+  const eloChanges: { [playerId: string]: number } = {};
 
   const teamStats = teams.map(team => {
     const baseElo = averageElo(team);
@@ -121,7 +121,8 @@ export const calculateMultiTeamEloChanges = (
     }
 
     team.forEach((player, index) => {
-      eloChanges[player.name] = (eloChanges[player.name] ?? 0) + rounded[index];
+      const playerKey = String(player.id);
+      eloChanges[playerKey] = (eloChanges[playerKey] ?? 0) + rounded[index];
     });
   };
 

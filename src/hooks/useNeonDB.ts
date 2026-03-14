@@ -15,21 +15,133 @@ const resolveWinnerIndex = (scores: number[], winnerIndex?: number | null) => {
   return maxIndexes.length === 1 ? maxIndexes[0] : null;
 };
 
-const normalizeMatch = (match: Match): Match => {
-  const teams = Array.isArray(match.teams) ? match.teams : [];
+const normalizeName = (name: string) => name.trim().toLowerCase();
+
+const buildPlayerLookup = (players: Player[]) => {
+  const byId = new Map<number, Player>();
+  const bySeasonAndName = new Map<string, Player>();
+
+  players.forEach(player => {
+    byId.set(player.id, player);
+    const seasonKey = Number.isFinite(Number(player.season_id)) ? String(player.season_id) : '';
+    const nameKey = normalizeName(player.name);
+    bySeasonAndName.set(`${seasonKey}::${nameKey}`, player);
+    bySeasonAndName.set(`::${nameKey}`, player);
+  });
+
+  return { byId, bySeasonAndName };
+};
+
+const resolvePlayerByName = (
+  name: string,
+  seasonId: number | null,
+  lookup: ReturnType<typeof buildPlayerLookup>
+) => {
+  const nameKey = normalizeName(name);
+  const seasonKey = Number.isFinite(Number(seasonId)) ? String(seasonId) : '';
+  return lookup.bySeasonAndName.get(`${seasonKey}::${nameKey}`) ?? lookup.bySeasonAndName.get(`::${nameKey}`);
+};
+
+const normalizeTeams = (
+  teams: unknown,
+  seasonId: number | null,
+  lookup: ReturnType<typeof buildPlayerLookup>
+) => {
+  if (!Array.isArray(teams)) return [];
+  return teams.map(team => {
+    if (!Array.isArray(team)) return [];
+    return team.map(entry => {
+      if (typeof entry === 'string') {
+        const player = resolvePlayerByName(entry, seasonId, lookup);
+        return {
+          id: player?.id ?? 0,
+          name: player?.name ?? entry
+        };
+      }
+
+      if (entry && typeof entry === 'object') {
+        const rawId = Number((entry as { id?: unknown }).id);
+        const rawName = (entry as { name?: unknown }).name;
+        const name = typeof rawName === 'string' ? rawName : '';
+
+        if (Number.isFinite(rawId) && rawId > 0) {
+          const player = lookup.byId.get(rawId);
+          return {
+            id: rawId,
+            name: name || player?.name || ''
+          };
+        }
+
+        const player = name ? resolvePlayerByName(name, seasonId, lookup) : undefined;
+        return {
+          id: player?.id ?? 0,
+          name: player?.name ?? name
+        };
+      }
+
+      return { id: 0, name: String(entry ?? '') };
+    });
+  });
+};
+
+const normalizeEloChanges = (
+  eloChanges: unknown,
+  seasonId: number | null,
+  lookup: ReturnType<typeof buildPlayerLookup>
+) => {
+  const normalized: { [playerId: string]: number } = {};
+  if (!eloChanges || typeof eloChanges !== 'object') return normalized;
+
+  for (const [key, value] of Object.entries(eloChanges as Record<string, unknown>)) {
+    let playerId = Number(key);
+    if (!Number.isFinite(playerId) || playerId <= 0) {
+      const player = resolvePlayerByName(key, seasonId, lookup);
+      if (!player) continue;
+      playerId = player.id;
+    }
+
+    const delta = Number(value);
+    normalized[String(playerId)] = Number.isFinite(delta) ? delta : 0;
+  }
+
+  return normalized;
+};
+
+const normalizeMatch = (
+  match: Match,
+  lookup: ReturnType<typeof buildPlayerLookup>,
+  resolvedSeasonId: number | null
+): Match => {
+  const parsedSeasonId = Number((match as Match).season_id);
+  const matchSeasonId = Number.isFinite(parsedSeasonId)
+    ? parsedSeasonId
+    : (Number.isFinite(Number(resolvedSeasonId)) ? Number(resolvedSeasonId) : 0);
+  const teams = normalizeTeams(match.teams, matchSeasonId, lookup);
   const rawScores = Array.isArray(match.scores) ? match.scores : [];
   const scores = rawScores.length < teams.length
     ? [...rawScores, ...Array(teams.length - rawScores.length).fill(0)]
     : rawScores;
   const winnerIndex = resolveWinnerIndex(scores, match.winnerIndex ?? null);
+  const rawEloChanges = (match as Match).eloChanges ?? (match as Match & { elo_changes?: unknown }).elo_changes ?? {};
+  const eloChanges = normalizeEloChanges(rawEloChanges, matchSeasonId, lookup);
 
   return {
     ...match,
     teams,
     scores,
     winnerIndex,
-    eloChanges: match.eloChanges ?? {}
+    eloChanges,
+    season_id: matchSeasonId
   };
+};
+
+const normalizeMatches = (
+  rawMatches: Match[],
+  rawPlayers: Player[],
+  resolvedSeasonId: number | null
+) => {
+  const lookup = buildPlayerLookup(rawPlayers);
+  return rawMatches.map(match => normalizeMatch(match, lookup, resolvedSeasonId));
 };
 
 export const useNeonDB = () => {
@@ -113,28 +225,18 @@ export const useNeonDB = () => {
           const rawMatches = Array.isArray(cloudData.matches) ? (cloudData.matches as Match[]) : [];
           const rawSeasons = Array.isArray(cloudData.seasons) ? (cloudData.seasons as Season[]) : [];
 
-          setPlayers(
-            rawPlayers.map((player: Player) => {
-              const parsedPlayerSeason = Number(player.season_id);
-              return {
-                ...player,
-                season_id: Number.isFinite(parsedPlayerSeason)
-                  ? parsedPlayerSeason
-                  : (resolvedSeasonId ?? player.season_id)
-              };
-            })
-          );
-          setMatches(
-            rawMatches.map((match: Match) => {
-              const parsedMatchSeason = Number(match.season_id);
-              return {
-                ...normalizeMatch(match),
-                season_id: Number.isFinite(parsedMatchSeason)
-                  ? parsedMatchSeason
-                  : (resolvedSeasonId ?? match.season_id)
-              };
-            })
-          );
+          const normalizedPlayers = rawPlayers.map((player: Player) => {
+            const parsedPlayerSeason = Number(player.season_id);
+            return {
+              ...player,
+              season_id: Number.isFinite(parsedPlayerSeason)
+                ? parsedPlayerSeason
+                : (resolvedSeasonId ?? player.season_id)
+            };
+          });
+
+          setPlayers(normalizedPlayers);
+          setMatches(normalizeMatches(rawMatches, normalizedPlayers, resolvedSeasonId));
           setSeasons(
             rawSeasons.map((season: Season) => ({
               ...season,
@@ -219,28 +321,18 @@ export const useNeonDB = () => {
       const rawMatches = Array.isArray(data.matches) ? (data.matches as Match[]) : [];
       const rawSeasons = Array.isArray(data.seasons) ? (data.seasons as Season[]) : [];
 
-      setPlayers(
-        rawPlayers.map((player: Player) => {
-          const parsedPlayerSeason = Number(player.season_id);
-          return {
-            ...player,
-            season_id: Number.isFinite(parsedPlayerSeason)
-              ? parsedPlayerSeason
-              : (resolvedSeasonId ?? player.season_id)
-          };
-        })
-      );
-      setMatches(
-        rawMatches.map((match: Match) => {
-          const parsedMatchSeason = Number(match.season_id);
-          return {
-            ...normalizeMatch(match),
-            season_id: Number.isFinite(parsedMatchSeason)
-              ? parsedMatchSeason
-              : (resolvedSeasonId ?? match.season_id)
-          };
-        })
-      );
+      const normalizedPlayers = rawPlayers.map((player: Player) => {
+        const parsedPlayerSeason = Number(player.season_id);
+        return {
+          ...player,
+          season_id: Number.isFinite(parsedPlayerSeason)
+            ? parsedPlayerSeason
+            : (resolvedSeasonId ?? player.season_id)
+        };
+      });
+
+      setPlayers(normalizedPlayers);
+      setMatches(normalizeMatches(rawMatches, normalizedPlayers, resolvedSeasonId));
       setSeasons(
         rawSeasons.map((season: Season) => ({
           ...season,

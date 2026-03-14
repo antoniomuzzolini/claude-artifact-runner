@@ -51,6 +51,128 @@ const resolveWinnerIndex = (scores: number[], winnerIndex?: number | null) => {
   return maxIndexes.length === 1 ? maxIndexes[0] : null;
 };
 
+const normalizeName = (name: string) => name.trim().toLowerCase();
+
+const buildPlayerLookup = (players: any[]) => {
+  const byId = new Map<number, { id: number; name: string; season_id?: number | null }>();
+  const bySeasonAndName = new Map<string, { id: number; name: string; season_id?: number | null }>();
+
+  players.forEach(player => {
+    const id = Number(player.id);
+    if (!Number.isFinite(id)) return;
+    const seasonKey = Number.isFinite(Number(player.season_id)) ? String(player.season_id) : '';
+    const nameKey = normalizeName(String(player.name ?? ''));
+    const record = { id, name: String(player.name ?? ''), season_id: player.season_id ?? null };
+    byId.set(id, record);
+    if (nameKey) {
+      bySeasonAndName.set(`${seasonKey}::${nameKey}`, record);
+      bySeasonAndName.set(`::${nameKey}`, record);
+    }
+  });
+
+  return { byId, bySeasonAndName };
+};
+
+const resolvePlayerByName = (
+  name: string,
+  seasonId: number | null,
+  lookup: ReturnType<typeof buildPlayerLookup>
+) => {
+  const nameKey = normalizeName(name);
+  const seasonKey = Number.isFinite(Number(seasonId)) ? String(seasonId) : '';
+  return lookup.bySeasonAndName.get(`${seasonKey}::${nameKey}`) ?? lookup.bySeasonAndName.get(`::${nameKey}`);
+};
+
+const normalizeTeams = (
+  teams: unknown,
+  seasonId: number | null,
+  lookup: ReturnType<typeof buildPlayerLookup>
+) => {
+  let changed = false;
+  if (!Array.isArray(teams)) return { teams: [], changed: teams !== undefined && teams !== null };
+
+  const normalized = teams.map(team => {
+    if (!Array.isArray(team)) {
+      changed = true;
+      return [];
+    }
+    return team.map(entry => {
+      if (typeof entry === 'string') {
+        changed = true;
+        const player = resolvePlayerByName(entry, seasonId, lookup);
+        return {
+          id: player?.id ?? 0,
+          name: player?.name ?? entry
+        };
+      }
+
+      if (entry && typeof entry === 'object') {
+        const rawId = Number((entry as { id?: unknown }).id);
+        const rawName = (entry as { name?: unknown }).name;
+        const name = typeof rawName === 'string' ? rawName : '';
+
+        if (Number.isFinite(rawId) && rawId > 0) {
+          const player = lookup.byId.get(rawId);
+          if (!name || (entry as { id?: unknown }).id !== rawId) {
+            changed = true;
+          }
+          return {
+            id: rawId,
+            name: name || player?.name || ''
+          };
+        }
+
+        changed = true;
+        const player = name ? resolvePlayerByName(name, seasonId, lookup) : undefined;
+        return {
+          id: player?.id ?? 0,
+          name: player?.name ?? name
+        };
+      }
+
+      changed = true;
+      return { id: 0, name: String(entry ?? '') };
+    });
+  });
+
+  return { teams: normalized, changed };
+};
+
+const normalizeEloChanges = (
+  eloChanges: unknown,
+  seasonId: number | null,
+  lookup: ReturnType<typeof buildPlayerLookup>
+) => {
+  let changed = false;
+  const normalized: Record<string, number> = {};
+  if (!eloChanges || typeof eloChanges !== 'object') {
+    return { eloChanges: normalized, changed: eloChanges !== undefined && eloChanges !== null };
+  }
+
+  for (const [key, value] of Object.entries(eloChanges as Record<string, unknown>)) {
+    let playerId = Number(key);
+    if (!Number.isFinite(playerId) || playerId <= 0) {
+      const player = resolvePlayerByName(key, seasonId, lookup);
+      if (!player) {
+        changed = true;
+        continue;
+      }
+      playerId = player.id;
+      changed = true;
+    }
+
+    const delta = Number(value);
+    if (!Number.isFinite(delta)) {
+      changed = true;
+      continue;
+    }
+
+    normalized[String(playerId)] = delta;
+  }
+
+  return { eloChanges: normalized, changed };
+};
+
 async function ensureSeasonsSchema() {
   await sql`
     CREATE TABLE IF NOT EXISTS seasons (
@@ -148,19 +270,35 @@ export async function GET(req: NextRequest) {
       `
     ]);
 
-    const transformedMatches = matches.map(match => {
-      const teams = Array.isArray(match.teams) ? match.teams : [];
+    const playerLookup = buildPlayerLookup(players);
+    const transformedMatches = [];
+
+    for (const match of matches) {
+      const parsedSeasonId = Number(match.season_id);
+      const matchSeasonId = Number.isFinite(parsedSeasonId) ? parsedSeasonId : null;
+      const teamsResult = normalizeTeams(match.teams, matchSeasonId, playerLookup);
+      const eloResult = normalizeEloChanges(match.elo_changes, matchSeasonId, playerLookup);
       const scores = Array.isArray(match.scores) ? match.scores : [];
       const winnerIndex = resolveWinnerIndex(scores, match.winner_index);
-      return {
+
+      if (teamsResult.changed || eloResult.changed) {
+        await sql`
+          UPDATE matches
+          SET teams = ${JSON.stringify(teamsResult.teams)},
+              elo_changes = ${JSON.stringify(eloResult.eloChanges)}
+          WHERE id = ${match.id} AND organization_id = ${currentUser.organizationId}
+        `;
+      }
+
+      transformedMatches.push({
         ...match,
-        teams,
+        teams: teamsResult.teams,
         scores,
         winnerIndex,
-        eloChanges: match.elo_changes,
+        eloChanges: eloResult.eloChanges,
         createdBy: match.created_by
-      };
-    });
+      });
+    }
 
     const seasons = await sql`
       SELECT * FROM seasons
@@ -263,11 +401,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const playerLookup = buildPlayerLookup(Array.isArray(playersData) ? playersData : []);
+
     if (Array.isArray(matchesData)) {
       for (const match of matchesData) {
-        const teams = Array.isArray(match.teams) ? match.teams : [];
+        const parsedSeasonId = Number(match.season_id);
+        const matchSeasonId = Number.isFinite(parsedSeasonId) ? parsedSeasonId : effectiveSeasonId;
+        const teamsResult = normalizeTeams(match.teams, matchSeasonId, playerLookup);
         const scores = Array.isArray(match.scores) ? match.scores : [];
         const winnerIndex = resolveWinnerIndex(scores, match.winnerIndex ?? null);
+        const rawEloChanges = match.eloChanges ?? match.elo_changes ?? {};
+        const eloResult = normalizeEloChanges(rawEloChanges, matchSeasonId, playerLookup);
 
         await sql`
           INSERT INTO matches (id, date, time, teams, scores, winner_index, elo_changes, created_by, organization_id, season_id)
@@ -275,13 +419,13 @@ export async function POST(req: NextRequest) {
             ${match.id},
             ${match.date},
             ${match.time},
-            ${JSON.stringify(teams)},
+            ${JSON.stringify(teamsResult.teams)},
             ${scores},
             ${winnerIndex},
-            ${JSON.stringify(match.eloChanges)},
+            ${JSON.stringify(eloResult.eloChanges)},
             ${match.createdBy || currentUser.userId},
             ${currentUser.organizationId},
-            ${match.season_id || effectiveSeasonId}
+            ${matchSeasonId}
           )
           ON CONFLICT (id) DO UPDATE SET
             date = EXCLUDED.date,

@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import React, { useState, useEffect } from 'react';
-import { Trophy, PlusCircle, BarChart3, Settings, Calendar, AlertTriangle } from 'lucide-react';
+import { Trophy, PlusCircle, BarChart3, Settings, Calendar, AlertTriangle, Users } from 'lucide-react';
 
 // Import types
 import { Match, NewMatch, AppData, Player } from '../types/championship';
@@ -25,6 +25,7 @@ import NewMatchTab from '../components/tabs/NewMatchTab';
 import HistoryTab from '../components/tabs/HistoryTab';
 import StorageTab from '../components/tabs/StorageTab';
 import SeasonsTab from '../components/tabs/SeasonsTab';
+import PlayersTab from '../components/tabs/PlayersTab';
 import UserMenu from '../components/auth/UserMenu';
 import AuthWrapper from '../components/auth/AuthWrapper';
 import PlayerStatsModal from '../components/PlayerStatsModal';
@@ -70,8 +71,8 @@ const ChampionshipManager = () => {
     teams: [[''], ['']],
     scores: [0, 0]
   });
-  const [activeTab, setActiveTab] = useState<'rankings' | 'new-match' | 'history' | 'seasons' | 'storage'>('rankings');
-  const [matchFilterPlayer, setMatchFilterPlayer] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<'rankings' | 'new-match' | 'history' | 'seasons' | 'players' | 'storage'>('rankings');
+  const [matchFilterPlayerId, setMatchFilterPlayerId] = useState<number | null>(null);
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null);
   const [isSeasonSaving, setIsSeasonSaving] = useState(false);
   const [isSeasonCreating, setIsSeasonCreating] = useState(false);
@@ -80,6 +81,8 @@ const ChampionshipManager = () => {
   // Player stats modal state
   const [selectedPlayerForStats, setSelectedPlayerForStats] = useState<Player | null>(null);
   const [isPlayerStatsModalOpen, setIsPlayerStatsModalOpen] = useState(false);
+
+  const normalizeName = (name: string) => name.trim().toLowerCase();
 
   const effectiveSeasonId = selectedSeasonId ?? currentSeasonId;
   const selectedSeasonPlayers = effectiveSeasonId
@@ -181,7 +184,7 @@ const ChampionshipManager = () => {
 
       const didWin = winnerIndex !== null && entry.teamIndex === winnerIndex;
       const isTie = winnerIndex === null;
-      const eloChange = eloChanges[entry.name] ?? 0;
+      const eloChange = eloChanges[String(p.id)] ?? 0;
 
       return {
         ...p,
@@ -197,7 +200,12 @@ const ChampionshipManager = () => {
       id: Date.now(),
       date: new Date().toLocaleDateString('en-US'),
       time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-      teams: newMatch.teams.map(team => team.slice()),
+      teams: teamsPlayers.map(team =>
+        team.map(player => ({
+          id: player.id,
+          name: player.name
+        }))
+      ),
       scores: newMatch.scores.slice(),
       winnerIndex,
       eloChanges,
@@ -218,21 +226,21 @@ const ChampionshipManager = () => {
   };
 
   // Filter matches by player
-  const filteredMatches = matchFilterPlayer 
+  const filteredMatches = matchFilterPlayerId !== null
     ? selectedSeasonMatches.filter(match => 
-        match.teams.some(team => team.includes(matchFilterPlayer))
+        match.teams.some(team => team.some(player => player.id === matchFilterPlayerId))
       )
     : selectedSeasonMatches;
 
   // Handle player click from rankings
-  const handlePlayerClick = (playerName: string) => {
-    setMatchFilterPlayer(playerName);
+  const handlePlayerClick = (playerId: number) => {
+    setMatchFilterPlayerId(playerId);
     setActiveTab('history');
   };
 
   // Handle opening player stats modal
-  const handlePlayerStatsClick = (playerName: string) => {
-    const player = selectedSeasonPlayers.find(p => p.name === playerName);
+  const handlePlayerStatsClick = (playerId: number) => {
+    const player = selectedSeasonPlayers.find(p => p.id === playerId);
     if (player) {
       setSelectedPlayerForStats(player);
       setIsPlayerStatsModalOpen(true);
@@ -256,7 +264,7 @@ const ChampionshipManager = () => {
 
   // Reset filters when switching seasons
   useEffect(() => {
-    setMatchFilterPlayer('');
+    setMatchFilterPlayerId(null);
     setIsPlayerStatsModalOpen(false);
     setSelectedPlayerForStats(null);
   }, [selectedSeasonId]);
@@ -268,7 +276,7 @@ const ChampionshipManager = () => {
       return;
     }
     const teamsLabel = match.teams
-      .map((team, index) => `Team ${index + 1}: ${team.join(', ')}`)
+      .map((team, index) => `Team ${index + 1}: ${team.map(player => player.name).join(', ')}`)
       .join(' vs ');
     const scoreLabel = match.scores.join(' - ');
     const confirmMessage = `Are you sure you want to delete this match?\n\nDate: ${match.date} ${match.time}\nTeams: ${teamsLabel}\nScore: ${scoreLabel}`;
@@ -280,6 +288,48 @@ const ChampionshipManager = () => {
         // This would require implementing ELO recalculation logic
       }
     }
+  };
+
+  const handleRenamePlayer = async (playerId: number, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) {
+      return { success: false, error: 'Player name cannot be empty.' };
+    }
+
+    const targetPlayer = players.find(player => player.id === playerId);
+    if (!targetPlayer) {
+      return { success: false, error: 'Player not found.' };
+    }
+
+    const hasDuplicate = players.some(player => (
+      player.id !== playerId
+      && player.season_id === targetPlayer.season_id
+      && normalizeName(player.name) === normalizeName(trimmed)
+    ));
+    if (hasDuplicate) {
+      return { success: false, error: 'Another player in this season already has that name.' };
+    }
+
+    setPlayers(prev => prev.map(player => (
+      player.id === playerId
+        ? { ...player, name: trimmed }
+        : player
+    )));
+
+    setMatches(prev => prev.map(match => ({
+      ...match,
+      teams: match.teams.map(team => team.map(member => (
+        member.id === playerId
+          ? { ...member, name: trimmed }
+          : member
+      )))
+    })));
+
+    setSelectedPlayerForStats(prev => (
+      prev?.id === playerId ? { ...prev, name: trimmed } : prev
+    ));
+
+    return { success: true };
   };
 
   const handleSelectSeason = (seasonId: number) => {
@@ -400,10 +450,19 @@ const ChampionshipManager = () => {
       const updatedMatches = [];
       let currentPlayers = [...resetPlayers];
 
+      const normalizeName = (name: string) => name.trim().toLowerCase();
+
       for (const match of sortedMatches) {
         // Find all players involved in this match
         const teamsPlayers = match.teams.map(team =>
-          team.map(name => currentPlayers.find(p => p.name === name)).filter(Boolean) as Player[]
+          team.map(playerRef => {
+            if (playerRef.id) {
+              const foundById = currentPlayers.find(p => p.id === playerRef.id);
+              if (foundById) return foundById;
+            }
+            const fallbackName = normalizeName(playerRef.name);
+            return currentPlayers.find(p => normalizeName(p.name) === fallbackName);
+          }).filter(Boolean) as Player[]
         );
 
         // Skip if any players are missing
@@ -437,7 +496,7 @@ const ChampionshipManager = () => {
           const didWin = winnerIndex !== null && teamIndex === winnerIndex;
           const isTie = winnerIndex === null;
           team.forEach(player => {
-            updatePlayerStats(player, eloChanges[player.name] ?? 0, didWin, isTie);
+            updatePlayerStats(player, eloChanges[String(player.id)] ?? 0, didWin, isTie);
           });
         });
 
@@ -529,11 +588,12 @@ const ChampionshipManager = () => {
               ...(isViewingCurrentSeason ? [{ id: 'new-match', name: 'New Match', Icon: PlusCircle }] : []),
               { id: 'history', name: 'History', Icon: BarChart3 },
               { id: 'seasons', name: 'Seasons', Icon: Calendar },
+              ...(user?.role === 'superuser' ? [{ id: 'players', name: 'Players', Icon: Users }] : []),
               ...(user?.role === 'superuser' ? [{ id: 'storage', name: 'Settings', Icon: Settings }] : []),
             ].map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as 'rankings' | 'new-match' | 'history' | 'seasons' | 'storage')}
+                onClick={() => setActiveTab(tab.id as 'rankings' | 'new-match' | 'history' | 'seasons' | 'players' | 'storage')}
                 className={`${
                   activeTab === tab.id
                     ? 'border-blue-500 text-blue-600 dark:text-blue-400'
@@ -623,8 +683,8 @@ const ChampionshipManager = () => {
               <HistoryTab
                 filteredMatches={filteredMatches}
                 players={selectedSeasonPlayers}
-                matchFilterPlayer={matchFilterPlayer}
-                setMatchFilterPlayer={setMatchFilterPlayer}
+                matchFilterPlayerId={matchFilterPlayerId}
+                setMatchFilterPlayerId={setMatchFilterPlayerId}
                 onDeleteMatch={handleDeleteMatch}
                 onPlayerStatsClick={handlePlayerStatsClick}
                 canEditMatches={isViewingCurrentSeason}
@@ -641,6 +701,13 @@ const ChampionshipManager = () => {
                 onCreateSeason={handleCreateSeason}
                 canCreateSeason={user?.role === 'superuser'}
                 isCreating={isSeasonCreating}
+              />
+            )}
+            {activeTab === 'players' && user?.role === 'superuser' && (
+              <PlayersTab
+                players={players}
+                seasons={seasons}
+                onRenamePlayer={handleRenamePlayer}
               />
             )}
             {activeTab === 'storage' && user?.role === 'superuser' && (

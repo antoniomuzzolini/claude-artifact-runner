@@ -113,18 +113,23 @@ export async function POST(req: NextRequest) {
       return jsonResponse({ error: 'No settings provided' }, 400);
     }
 
-    const minMatchesValue = hasMinMatches
-      ? Number.parseInt(String(rawMinMatches), 10)
-      : null;
-    const eloKFactorValue = hasEloKFactor
-      ? Number.parseInt(String(rawEloKFactor), 10)
-      : null;
+    let minMatchesValue: number | null = null;
+    let eloKFactorValue: number | null = null;
 
-    if (hasMinMatches && (Number.isNaN(minMatchesValue) || minMatchesValue < 0 || minMatchesValue > 1000)) {
-      return jsonResponse({ error: 'minMatchesForRanking must be a number between 0 and 1000' }, 400);
+    if (hasMinMatches) {
+      const parsedMinMatches = Number.parseInt(String(rawMinMatches), 10);
+      if (Number.isNaN(parsedMinMatches) || parsedMinMatches < 0 || parsedMinMatches > 1000) {
+        return jsonResponse({ error: 'minMatchesForRanking must be a number between 0 and 1000' }, 400);
+      }
+      minMatchesValue = parsedMinMatches;
     }
-    if (hasEloKFactor && (Number.isNaN(eloKFactorValue) || eloKFactorValue < 1 || eloKFactorValue > 100)) {
-      return jsonResponse({ error: 'eloKFactor must be a number between 1 and 100' }, 400);
+
+    if (hasEloKFactor) {
+      const parsedEloKFactor = Number.parseInt(String(rawEloKFactor), 10);
+      if (Number.isNaN(parsedEloKFactor) || parsedEloKFactor < 1 || parsedEloKFactor > 100) {
+        return jsonResponse({ error: 'eloKFactor must be a number between 1 and 100' }, 400);
+      }
+      eloKFactorValue = parsedEloKFactor;
     }
 
     const result = await sql`

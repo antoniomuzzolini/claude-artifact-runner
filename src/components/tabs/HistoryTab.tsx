@@ -7,24 +7,28 @@ import { useAuth } from '../../hooks/useAuth';
 
 interface HistoryTabProps {
   players: Player[];
-  matchFilterPlayer: string;
-  setMatchFilterPlayer: React.Dispatch<React.SetStateAction<string>>;
+  matchFilterPlayerId: number | null;
+  setMatchFilterPlayerId: React.Dispatch<React.SetStateAction<number | null>>;
   filteredMatches: Match[];
   onDeleteMatch: (match: Match) => void;
-  onPlayerStatsClick?: (playerName: string) => void;
+  onPlayerStatsClick?: (playerId: number) => void;
   canEditMatches?: boolean;
 }
 
 const HistoryTab: React.FC<HistoryTabProps> = ({
   players,
-  matchFilterPlayer,
-  setMatchFilterPlayer,
+  matchFilterPlayerId,
+  setMatchFilterPlayerId,
   filteredMatches,
   onDeleteMatch,
   onPlayerStatsClick,
   canEditMatches = true
 }) => {
   const { permissions, user } = useAuth();
+  const selectedPlayer = matchFilterPlayerId !== null
+    ? players.find(player => player.id === matchFilterPlayerId)
+    : null;
+  const selectedPlayerName = selectedPlayer?.name ?? 'Unknown player';
 
   return (
     <div className="space-y-6">
@@ -37,21 +41,24 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
       <div className="flex items-center gap-4 mb-6">
         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Filter by player:</label>
         <select
-          value={matchFilterPlayer}
-          onChange={(e) => setMatchFilterPlayer(e.target.value)}
+          value={matchFilterPlayerId ?? ''}
+          onChange={(e) => {
+            const value = e.target.value;
+            setMatchFilterPlayerId(value ? Number(value) : null);
+          }}
           className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200"
         >
           <option value="">All players</option>
           {players.map((player) => (
-            <option key={player.id} value={player.name}>
+            <option key={player.id} value={player.id}>
               {player.name}
             </option>
           ))}
         </select>
         
-        {matchFilterPlayer && (
+        {matchFilterPlayerId !== null && (
           <button
-            onClick={() => setMatchFilterPlayer('')}
+            onClick={() => setMatchFilterPlayerId(null)}
             className="px-3 py-1 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-md border border-gray-300 dark:border-gray-500 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
           >
             Remove filter
@@ -63,17 +70,17 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
         <div className="text-center py-12">
           <Clock className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" />
           <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
-            {matchFilterPlayer ? `No matches found for ${matchFilterPlayer}` : 'No matches yet'}
+            {matchFilterPlayerId !== null ? `No matches found for ${selectedPlayerName}` : 'No matches yet'}
           </h3>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            {matchFilterPlayer ? 'Try selecting a different player or clear the filter.' : 'Add your first match to see history here.'}
+            {matchFilterPlayerId !== null ? 'Try selecting a different player or clear the filter.' : 'Add your first match to see history here.'}
           </p>
         </div>
       ) : (
         <div className="space-y-4">
           <div className="text-sm text-gray-600 dark:text-gray-400 mb-4">
             Showing {filteredMatches.length} match{filteredMatches.length !== 1 ? 'es' : ''}
-            {matchFilterPlayer && ` for ${matchFilterPlayer}`}
+            {matchFilterPlayerId !== null && ` for ${selectedPlayerName}`}
           </div>
           
           {filteredMatches.map((match) => (
@@ -118,20 +125,20 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                       <div className="space-y-1">
                         {team.map((player, index) => (
                           <div
-                            key={index}
+                            key={`${player.id}-${index}`}
                             onClick={(e) => {
                               if (onPlayerStatsClick) {
                                 e.stopPropagation();
-                                onPlayerStatsClick(player);
+                                onPlayerStatsClick(player.id);
                               }
                             }}
                             className={`text-sm font-medium cursor-pointer hover:underline transition-colors duration-200 ${
-                              matchFilterPlayer === player
+                              matchFilterPlayerId === player.id
                                 ? 'text-blue-600 dark:text-blue-400 font-bold'
                                 : 'text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400'
                             }`}
                           >
-                            {player}
+                            {player.name}
                           </div>
                         ))}
                       </div>
@@ -151,29 +158,29 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                     className="grid gap-2"
                     style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}
                   >
-                    {match.teams.flat().map((playerName) => {
-                      const change = match.eloChanges[playerName] ?? 0;
+                    {match.teams.flat().map((player) => {
+                      const change = match.eloChanges[String(player.id)] ?? 0;
                       return (
                       <div
-                        key={playerName}
+                        key={`elo-${player.id}`}
                         onClick={(e) => {
                           if (onPlayerStatsClick) {
                             e.stopPropagation();
-                            onPlayerStatsClick(playerName);
+                            onPlayerStatsClick(player.id);
                           }
                         }}
                         className={`text-center p-2 rounded border cursor-pointer hover:shadow-md transition-all duration-200 ${
-                          matchFilterPlayer === playerName 
+                          matchFilterPlayerId === player.id 
                             ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-600' 
                             : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600'
                         }`}
                       >
                         <div className={`text-xs font-medium hover:underline ${
-                          matchFilterPlayer === playerName 
+                          matchFilterPlayerId === player.id 
                             ? 'text-blue-600 dark:text-blue-400' 
                             : 'text-gray-700 dark:text-gray-300'
                         }`}>
-                          {playerName}
+                          {player.name}
                         </div>
                         <div className={`text-sm font-bold ${
                           change > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
