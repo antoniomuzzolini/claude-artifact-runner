@@ -3,19 +3,21 @@
 import React from 'react';
 import { Trophy, Medal, Award } from 'lucide-react';
 import { Player } from '../../types/championship';
+import { RankingMode, comparePlayersByRanking, formatRankingValue, getRankingLabel, getRankingValue } from '../../utils/ranking';
 
 interface RankingsTabProps {
   players: Player[];
   minMatchesForRanking: number;
+  rankingMode: RankingMode;
   onPlayerClick?: (playerId: number) => void;
   onPlayerStatsClick?: (playerId: number) => void;
 }
 
-const RankingsTab: React.FC<RankingsTabProps> = ({ players, minMatchesForRanking, onPlayerClick, onPlayerStatsClick }) => {
-  // Sort players by ELO rating (highest first)
+const RankingsTab: React.FC<RankingsTabProps> = ({ players, minMatchesForRanking, rankingMode, onPlayerClick, onPlayerStatsClick }) => {
+  // Sort players by selected ranking mode (highest first)
   const sortedPlayers = [...players]
     .filter(p => p.matches >= minMatchesForRanking)
-    .sort((a, b) => b.elo - a.elo);
+    .sort((a, b) => comparePlayersByRanking(a, b, rankingMode));
 
   const getRankIcon = (rank: number) => {
     switch (rank) {
@@ -83,8 +85,10 @@ const RankingsTab: React.FC<RankingsTabProps> = ({ players, minMatchesForRanking
                   </div>
                   
                   <div className="text-right">
-                    <div className="text-2xl font-bold text-gray-900 dark:text-white">{player.elo}</div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400">ELO Rating</div>
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {formatRankingValue(getRankingValue(player, rankingMode), rankingMode)}
+                    </div>
+                    <div className="text-sm text-gray-500 dark:text-gray-400">{getRankingLabel(rankingMode)}</div>
                   </div>
                 </div>
                 

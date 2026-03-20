@@ -3,11 +3,13 @@
 import React, { useState } from 'react';
 import { X, Target, Users } from 'lucide-react';
 import { Player, Match } from '../types/championship';
+import { RankingMode, formatRankingValue, getRankingLabel } from '../utils/ranking';
 
 interface PlayerStatsModalProps {
   player: Player | null;
   matches: Match[];
   minMatchesForRanking: number;
+  rankingMode: RankingMode;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -34,6 +36,7 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
   player,
   matches,
   minMatchesForRanking,
+  rankingMode,
   isOpen,
   onClose
 }) => {
@@ -141,6 +144,7 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
 
   // Calculate overall win rate
   const winRate = player.matches > 0 ? (player.wins / player.matches * 100).toFixed(1) : '0.0';
+  const isEloRanking = rankingMode === 'elo';
 
   // Calculate total points made and received
   let totalPointsMade = 0;
@@ -180,34 +184,139 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
     return dateA.getTime() - dateB.getTime();
   });
 
-  const totalEloDelta = sortedPlayerMatches.reduce((sum, match) => {
-    return sum + (match.eloChanges[String(player.id)] ?? 0);
-  }, 0);
+  const buildTrendPoints = () => {
+    const basePoint = { label: 'Start', tooltip: 'Start season', value: 0 };
+    if (sortedPlayerMatches.length === 0) {
+      return [basePoint];
+    }
 
-  const startingElo = player.elo - totalEloDelta;
-  let runningElo = startingElo;
-  const eloPoints = [
-    { label: 'Start', tooltip: 'Start season', value: startingElo }
-  ];
+    if (rankingMode === 'elo') {
+      const totalEloDelta = sortedPlayerMatches.reduce((sum, match) => {
+        return sum + (match.eloChanges[String(player.id)] ?? 0);
+      }, 0);
 
-  sortedPlayerMatches.forEach(match => {
-    runningElo += match.eloChanges[String(player.id)] ?? 0;
-    const matchDate = new Date(`${match.date} ${match.time}`);
-    eloPoints.push({
-      label: matchDate.toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'short'
-      }),
-      tooltip: matchDate.toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric'
-      }),
-      value: runningElo
+      const startingElo = player.elo - totalEloDelta;
+      let runningElo = startingElo;
+      const points = [
+        { label: 'Start', tooltip: 'Start season', value: startingElo }
+      ];
+
+      sortedPlayerMatches.forEach(match => {
+        runningElo += match.eloChanges[String(player.id)] ?? 0;
+        const matchDate = new Date(`${match.date} ${match.time}`);
+        points.push({
+          label: matchDate.toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short'
+          }),
+          tooltip: matchDate.toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+          }),
+          value: runningElo
+        });
+      });
+
+      return points;
+    }
+
+    if (rankingMode === 'wins') {
+      let wins = 0;
+      const points = [basePoint];
+      sortedPlayerMatches.forEach(match => {
+        const teamIndex = match.teams.findIndex(team => team.some(member => member.id === player.id));
+        if (teamIndex < 0) return;
+        const didWin = match.winnerIndex !== null && match.winnerIndex === teamIndex;
+        if (didWin) wins += 1;
+        const matchDate = new Date(`${match.date} ${match.time}`);
+        points.push({
+          label: matchDate.toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short'
+          }),
+          tooltip: matchDate.toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+          }),
+          value: wins
+        });
+      });
+      return points;
+    }
+
+    if (rankingMode === 'win_rate') {
+      let wins = 0;
+      let total = 0;
+      const points = [basePoint];
+      sortedPlayerMatches.forEach(match => {
+        const teamIndex = match.teams.findIndex(team => team.some(member => member.id === player.id));
+        if (teamIndex < 0) return;
+        const didWin = match.winnerIndex !== null && match.winnerIndex === teamIndex;
+        total += 1;
+        if (didWin) wins += 1;
+        const rate = total > 0 ? (wins / total) * 100 : 0;
+        const matchDate = new Date(`${match.date} ${match.time}`);
+        points.push({
+          label: matchDate.toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short'
+          }),
+          tooltip: matchDate.toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+          }),
+          value: rate
+        });
+      });
+      return points;
+    }
+
+    let pointsScored = 0;
+    const points = [basePoint];
+    sortedPlayerMatches.forEach(match => {
+      const teamIndex = match.teams.findIndex(team => team.some(member => member.id === player.id));
+      if (teamIndex < 0) return;
+      const teamScore = match.scores[teamIndex] ?? 0;
+      pointsScored += teamScore;
+      const matchDate = new Date(`${match.date} ${match.time}`);
+      points.push({
+        label: matchDate.toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: 'short'
+        }),
+        tooltip: matchDate.toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric'
+        }),
+        value: pointsScored
+      });
     });
-  });
+
+    return points;
+  };
+
+  const eloPoints = buildTrendPoints();
 
   const gradientId = `elo-gradient-${player.id}`;
+  const trendTitle = rankingMode === 'elo' ? 'ELO Trend' : `${getRankingLabel(rankingMode)} Trend`;
+  const trendLabel = getRankingLabel(rankingMode);
+  const formatDelta = (value: number) => {
+    const prefix = value > 0 ? '+' : '';
+    if (rankingMode === 'win_rate') {
+      return `${prefix}${value.toFixed(1)}%`;
+    }
+    return `${prefix}${Math.round(value)}`;
+  };
+  const formatTickValue = (value: number) => {
+    if (rankingMode === 'win_rate') {
+      return value.toFixed(0);
+    }
+    return `${Math.round(value)}`;
+  };
   const chartWidth = 600;
   const chartHeight = 160;
   const chartPadding = 24;
@@ -234,7 +343,7 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
   const tooltipIndex = hoveredEloIndex !== null ? hoveredEloIndex : null;
   const tooltipPoint = tooltipIndex !== null ? chartPoints[tooltipIndex] : null;
   const tooltipText = tooltipIndex !== null
-    ? `${eloPoints[tooltipIndex].tooltip} · ELO ${eloPoints[tooltipIndex].value}`
+    ? `${eloPoints[tooltipIndex].tooltip} - ${trendLabel} ${formatRankingValue(eloPoints[tooltipIndex].value, rankingMode)}`
     : '';
   const tooltipWidth = 160;
   const tooltipHeight = 28;
@@ -280,10 +389,12 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
           <div className="p-6">
             {/* Basic Stats Grid */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 text-center border border-blue-200 dark:border-blue-800">
-                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{player.elo}</div>
-                <div className="text-sm text-blue-600 dark:text-blue-400 font-medium">ELO Rating</div>
-              </div>
+              {isEloRanking && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 text-center border border-blue-200 dark:border-blue-800">
+                  <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{player.elo}</div>
+                  <div className="text-sm text-blue-600 dark:text-blue-400 font-medium">ELO Rating</div>
+                </div>
+              )}
               <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 text-center border border-green-200 dark:border-green-800">
                 <div className="text-2xl font-bold text-green-600 dark:text-green-400">{player.wins}</div>
                 <div className="text-sm text-green-600 dark:text-green-400 font-medium">Wins</div>
@@ -309,11 +420,11 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
             {/* ELO Trend Chart */}
             <div className="bg-white dark:bg-gray-700 rounded-lg p-6 border dark:border-gray-600 shadow-sm mb-8">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">ELO Trend</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{trendTitle}</h3>
                 <div className={`text-sm font-semibold ${
                   netEloChange >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                 }`}>
-                  {netEloChange >= 0 ? '+' : ''}{netEloChange} net
+                  {formatDelta(netEloChange)} net
                 </div>
               </div>
 
@@ -352,7 +463,7 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
                               fontSize="10"
                               textAnchor="end"
                             >
-                              {value}
+                              {formatTickValue(value)}
                             </text>
                           </g>
                         );
@@ -427,14 +538,14 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({
                     </svg>
                   </div>
                   <div className="mt-3 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-                    <span>Start: {eloPoints[0].value}</span>
-                    <span>Min: {minElo}</span>
-                    <span>Max: {maxElo}</span>
-                    <span>Now: {eloPoints[eloPoints.length - 1].value}</span>
+                    <span>Start: {formatRankingValue(eloPoints[0].value, rankingMode)}</span>
+                    <span>Min: {formatRankingValue(minElo, rankingMode)}</span>
+                    <span>Max: {formatRankingValue(maxElo, rankingMode)}</span>
+                    <span>Now: {formatRankingValue(eloPoints[eloPoints.length - 1].value, rankingMode)}</span>
                   </div>
                 </>
               ) : (
-                <p className="text-sm text-gray-500 dark:text-gray-400">No matches yet to show an ELO trend.</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">No matches yet to show a trend.</p>
               )}
             </div>
 

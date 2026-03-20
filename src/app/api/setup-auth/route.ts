@@ -208,8 +208,20 @@ export async function POST(req: NextRequest) {
       CREATE TABLE IF NOT EXISTS organization_settings (
         organization_id INTEGER PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
         min_matches_for_ranking INTEGER DEFAULT 10,
+        elo_k_factor INTEGER DEFAULT 32,
+        ranking_mode VARCHAR(32) DEFAULT 'elo',
         updated_at TIMESTAMP DEFAULT NOW()
       );
+    `;
+
+    await sql`
+      ALTER TABLE organization_settings
+      ADD COLUMN IF NOT EXISTS elo_k_factor INTEGER DEFAULT 32;
+    `;
+
+    await sql`
+      ALTER TABLE organization_settings
+      ADD COLUMN IF NOT EXISTS ranking_mode VARCHAR(32) DEFAULT 'elo';
     `;
 
     await sql`

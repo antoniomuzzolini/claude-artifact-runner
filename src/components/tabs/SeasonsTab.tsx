@@ -4,12 +4,14 @@ import React from 'react';
 import { Trophy, Calendar, PlusCircle } from 'lucide-react';
 import { Match, Player, Season } from '../../types/championship';
 import { buildPlayerStats } from '../../utils/playerStats';
+import { RankingMode, comparePlayersByRanking, formatRankingValue, getRankingValue } from '../../utils/ranking';
 
 interface SeasonsTabProps {
   seasons: Season[];
   players: Player[];
   matches: Match[];
   minMatchesForRanking: number;
+  rankingMode: RankingMode;
   currentSeasonId: number | null;
   selectedSeasonId: number | null;
   onSelectSeason: (seasonId: number) => void;
@@ -29,6 +31,7 @@ const SeasonsTab: React.FC<SeasonsTabProps> = ({
   players,
   matches,
   minMatchesForRanking,
+  rankingMode,
   currentSeasonId,
   selectedSeasonId,
   onSelectSeason,
@@ -76,7 +79,7 @@ const SeasonsTab: React.FC<SeasonsTabProps> = ({
             const seasonParticipants = seasonPlayers.filter(player => player.matches > 0);
             const podium = seasonPlayers
               .filter(p => p.matches >= minMatchesForRanking)
-              .sort((a, b) => b.elo - a.elo)
+              .sort((a, b) => comparePlayersByRanking(a, b, rankingMode))
               .slice(0, 3);
 
             const isCurrent = season.id === currentSeasonId;
@@ -130,7 +133,7 @@ const SeasonsTab: React.FC<SeasonsTabProps> = ({
                             <span className="w-6 text-sm font-bold text-gray-700 dark:text-gray-200">#{index + 1}</span>
                             <span className="text-sm font-medium text-gray-900 dark:text-white">{player.name}</span>
                           </div>
-                          <div className="text-sm font-semibold text-gray-700 dark:text-gray-200">{player.elo}</div>
+                          <div className="text-sm font-semibold text-gray-700 dark:text-gray-200">{formatRankingValue(getRankingValue(player, rankingMode), rankingMode)}</div>
                         </div>
                       ))}
                     </div>

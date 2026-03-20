@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from './useAuth';
+import { DEFAULT_RANKING_MODE, RankingMode, isRankingMode } from '../utils/ranking';
 
 const DEFAULT_MIN_MATCHES = 10;
 const DEFAULT_ELO_K_FACTOR = 32;
@@ -10,6 +11,7 @@ export const useSettings = () => {
   const { makeAuthenticatedRequest, isAuthenticated } = useAuth();
   const [minMatchesForRanking, setMinMatchesForRanking] = useState<number>(DEFAULT_MIN_MATCHES);
   const [eloKFactor, setEloKFactor] = useState<number>(DEFAULT_ELO_K_FACTOR);
+  const [rankingMode, setRankingMode] = useState<RankingMode>(DEFAULT_RANKING_MODE);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +35,9 @@ export const useSettings = () => {
         if (typeof data.eloKFactor === 'number') {
           setEloKFactor(data.eloKFactor);
         }
+        if (isRankingMode(data.rankingMode)) {
+          setRankingMode(data.rankingMode);
+        }
       } else {
         const data = await response.json().catch(() => ({}));
         setError(data.error || 'Failed to load settings');
@@ -44,7 +49,7 @@ export const useSettings = () => {
     }
   }, [isAuthenticated, makeAuthenticatedRequest]);
 
-  const persistSettings = useCallback(async (payload: { minMatchesForRanking?: number; eloKFactor?: number }) => {
+  const persistSettings = useCallback(async (payload: { minMatchesForRanking?: number; eloKFactor?: number; rankingMode?: RankingMode }) => {
     if (!isAuthenticated) {
       setError('Authentication required');
       return false;
@@ -66,6 +71,9 @@ export const useSettings = () => {
         }
         if (typeof data.eloKFactor === 'number') {
           setEloKFactor(data.eloKFactor);
+        }
+        if (isRankingMode(data.rankingMode)) {
+          setRankingMode(data.rankingMode);
         }
         return true;
       }
@@ -91,6 +99,11 @@ export const useSettings = () => {
     [persistSettings]
   );
 
+  const updateRankingMode = useCallback(
+    async (value: RankingMode) => persistSettings({ rankingMode: value }),
+    [persistSettings]
+  );
+
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
@@ -98,11 +111,13 @@ export const useSettings = () => {
   return {
     minMatchesForRanking,
     eloKFactor,
+    rankingMode,
     isLoading,
     isSaving,
     error,
     reloadSettings: loadSettings,
     updateMinMatchesForRanking,
     updateEloKFactor,
+    updateRankingMode,
   };
 };

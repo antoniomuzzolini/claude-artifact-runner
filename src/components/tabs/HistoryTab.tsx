@@ -3,6 +3,7 @@
 import React from 'react';
 import { Clock, Trash2, Crown } from 'lucide-react';
 import { Player, Match } from '../../types/championship';
+import { RankingMode } from '../../utils/ranking';
 import { useAuth } from '../../hooks/useAuth';
 
 interface HistoryTabProps {
@@ -10,6 +11,7 @@ interface HistoryTabProps {
   matchFilterPlayerId: number | null;
   setMatchFilterPlayerId: React.Dispatch<React.SetStateAction<number | null>>;
   filteredMatches: Match[];
+  rankingMode: RankingMode;
   onDeleteMatch: (match: Match) => void;
   onPlayerStatsClick?: (playerId: number) => void;
   canEditMatches?: boolean;
@@ -20,6 +22,7 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
   matchFilterPlayerId,
   setMatchFilterPlayerId,
   filteredMatches,
+  rankingMode,
   onDeleteMatch,
   onPlayerStatsClick,
   canEditMatches = true
@@ -150,6 +153,7 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                 </div>
 
                 {/* ELO Changes */}
+                {rankingMode === 'elo' && (
                 <div className="mt-4 pt-3 border-t dark:border-gray-600">
                   <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
                     ELO Changes
@@ -192,6 +196,7 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                     })}
                   </div>
                 </div>
+                )}
               </div>
 
               {/* Delete Button */}

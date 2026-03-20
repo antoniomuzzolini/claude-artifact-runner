@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Download, Upload, Cloud, Wifi, WifiOff, RefreshCw, Trash2, AlertTriangle } from 'lucide-react';
 import { Player, Match, Season } from '../../types/championship';
+import { RankingMode, RANKING_MODE_OPTIONS } from '../../utils/ranking';
 
 interface StorageTabProps {
   players: Player[];
@@ -13,10 +14,12 @@ interface StorageTabProps {
   error: string | null;
   minMatchesForRanking: number;
   eloKFactor: number;
+  rankingMode: RankingMode;
   isSettingsLoading: boolean;
   isSettingsSaving: boolean;
   onUpdateMinMatchesForRanking: (value: number) => Promise<boolean>;
   onUpdateEloKFactor: (value: number) => Promise<boolean>;
+  onUpdateRankingMode: (value: RankingMode) => Promise<boolean>;
   currentSeason?: Season | null;
   onUpdateCurrentSeasonName?: (name: string) => Promise<boolean>;
   isSeasonSaving?: boolean;
@@ -40,10 +43,12 @@ const StorageTab: React.FC<StorageTabProps> = ({
   error,
   minMatchesForRanking,
   eloKFactor,
+  rankingMode,
   isSettingsLoading,
   isSettingsSaving,
   onUpdateMinMatchesForRanking,
   onUpdateEloKFactor,
+  onUpdateRankingMode,
   currentSeason,
   onUpdateCurrentSeasonName,
   isSeasonSaving = false,
@@ -63,6 +68,9 @@ const StorageTab: React.FC<StorageTabProps> = ({
   const [eloKFactorInput, setEloKFactorInput] = useState<string>(String(eloKFactor));
   const [eloKFactorError, setEloKFactorError] = useState<string | null>(null);
   const [eloKFactorMessage, setEloKFactorMessage] = useState<string | null>(null);
+  const [rankingModeInput, setRankingModeInput] = useState<RankingMode>(rankingMode);
+  const [rankingModeError, setRankingModeError] = useState<string | null>(null);
+  const [rankingModeMessage, setRankingModeMessage] = useState<string | null>(null);
   const [seasonNameInput, setSeasonNameInput] = useState<string>(currentSeason?.name || '');
   const [seasonMessage, setSeasonMessage] = useState<string | null>(null);
   const [seasonError, setSeasonError] = useState<string | null>(null);
@@ -74,6 +82,10 @@ const StorageTab: React.FC<StorageTabProps> = ({
   useEffect(() => {
     setEloKFactorInput(String(eloKFactor));
   }, [eloKFactor]);
+
+  useEffect(() => {
+    setRankingModeInput(rankingMode);
+  }, [rankingMode]);
 
   useEffect(() => {
     setSeasonNameInput(currentSeason?.name || '');
@@ -94,6 +106,8 @@ const StorageTab: React.FC<StorageTabProps> = ({
     }
     setSettingsMessage('Settings saved.');
   };
+
+  const isEloRanking = rankingModeInput === 'elo';
 
   const handleSaveSeasonName = async () => {
     if (!onUpdateCurrentSeasonName) return;
@@ -128,6 +142,17 @@ const StorageTab: React.FC<StorageTabProps> = ({
       return;
     }
     setEloKFactorMessage('ELO K-factor saved.');
+  };
+
+  const handleSaveRankingMode = async () => {
+    setRankingModeError(null);
+    setRankingModeMessage(null);
+    const success = await onUpdateRankingMode(rankingModeInput);
+    if (!success) {
+      setRankingModeError('Failed to save ranking mode. Please try again.');
+      return;
+    }
+    setRankingModeMessage('Ranking mode saved.');
   };
 
   return (
@@ -171,6 +196,43 @@ const StorageTab: React.FC<StorageTabProps> = ({
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-3">
             <label className="text-sm text-gray-600 dark:text-gray-300">
+              Ranking mode
+            </label>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <select
+                value={rankingModeInput}
+                onChange={(e) => setRankingModeInput(e.target.value as RankingMode)}
+                className="w-full sm:w-60 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                disabled={isSettingsLoading || isSettingsSaving}
+              >
+                {RANKING_MODE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={handleSaveRankingMode}
+                disabled={isSettingsLoading || isSettingsSaving}
+                className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors duration-200 disabled:bg-gray-400 dark:disabled:bg-gray-600"
+              >
+                {isSettingsSaving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+            {rankingModeError && (
+              <p className="text-sm text-red-600 dark:text-red-400">{rankingModeError}</p>
+            )}
+            {rankingModeMessage && (
+              <p className="text-sm text-green-600 dark:text-green-400">{rankingModeMessage}</p>
+            )}
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Rankings control the main leaderboard and player charts. ELO is still calculated in the background.
+            </p>
+          </div>
+
+          {isEloRanking && (
+          <div className="flex flex-col gap-3">
+            <label className="text-sm text-gray-600 dark:text-gray-300">
               ELO K-factor
             </label>
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -202,6 +264,7 @@ const StorageTab: React.FC<StorageTabProps> = ({
               Higher values make ratings change faster. Typical range is 16–40.
             </p>
           </div>
+          )}
 
           <div className="flex flex-col gap-3">
             <label className="text-sm text-gray-600 dark:text-gray-300">
@@ -368,7 +431,7 @@ const StorageTab: React.FC<StorageTabProps> = ({
       )}
 
       {/* ELO Recalculation - Superuser Only */}
-      {isSuperuser && onRecalculateELO && (
+      {isSuperuser && isEloRanking && onRecalculateELO && (
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border dark:border-gray-700 shadow-sm">
           <h3 className="text-lg font-semibold mb-4 text-orange-600 dark:text-orange-400">ELO Recalculation</h3>
           

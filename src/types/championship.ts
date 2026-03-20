@@ -15,6 +15,8 @@ export interface Player {
   matches: number;
   wins: number;
   losses: number;
+  pointsScored?: number;
+  pointsConceded?: number;
   organization_id: number;
 }
 

@@ -1,6 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 import jwt from 'jsonwebtoken';
 import { NextRequest, NextResponse } from 'next/server';
+import { DEFAULT_RANKING_MODE, isRankingMode, RankingMode } from '../../../utils/ranking';
 
 export const runtime = 'nodejs';
 
@@ -48,12 +49,17 @@ async function ensureSettingsTable() {
       organization_id INTEGER PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
       min_matches_for_ranking INTEGER DEFAULT 10,
       elo_k_factor INTEGER DEFAULT 32,
+      ranking_mode VARCHAR(32) DEFAULT 'elo',
       updated_at TIMESTAMP DEFAULT NOW()
     );
   `;
   await sql`
     ALTER TABLE organization_settings
     ADD COLUMN IF NOT EXISTS elo_k_factor INTEGER DEFAULT 32;
+  `;
+  await sql`
+    ALTER TABLE organization_settings
+    ADD COLUMN IF NOT EXISTS ranking_mode VARCHAR(32) DEFAULT 'elo';
   `;
 }
 
@@ -65,7 +71,7 @@ export async function GET(req: NextRequest) {
     await ensureSettingsTable();
 
     const rows = await sql`
-      SELECT min_matches_for_ranking, elo_k_factor
+      SELECT min_matches_for_ranking, elo_k_factor, ranking_mode
       FROM organization_settings
       WHERE organization_id = ${currentUser.organizationId}
       LIMIT 1;
@@ -73,21 +79,23 @@ export async function GET(req: NextRequest) {
 
     if (rows.length === 0) {
       await sql`
-        INSERT INTO organization_settings (organization_id, min_matches_for_ranking, elo_k_factor)
-        VALUES (${currentUser.organizationId}, ${DEFAULT_MIN_MATCHES}, ${DEFAULT_ELO_K_FACTOR});
+        INSERT INTO organization_settings (organization_id, min_matches_for_ranking, elo_k_factor, ranking_mode)
+        VALUES (${currentUser.organizationId}, ${DEFAULT_MIN_MATCHES}, ${DEFAULT_ELO_K_FACTOR}, ${DEFAULT_RANKING_MODE});
       `;
 
       return jsonResponse({
         success: true,
         minMatchesForRanking: DEFAULT_MIN_MATCHES,
-        eloKFactor: DEFAULT_ELO_K_FACTOR
+        eloKFactor: DEFAULT_ELO_K_FACTOR,
+        rankingMode: DEFAULT_RANKING_MODE
       });
     }
 
     return jsonResponse({
       success: true,
       minMatchesForRanking: rows[0].min_matches_for_ranking ?? DEFAULT_MIN_MATCHES,
-      eloKFactor: rows[0].elo_k_factor ?? DEFAULT_ELO_K_FACTOR
+      eloKFactor: rows[0].elo_k_factor ?? DEFAULT_ELO_K_FACTOR,
+      rankingMode: (rows[0].ranking_mode as RankingMode) ?? DEFAULT_RANKING_MODE
     });
   } catch (error) {
     console.error('Settings API error:', error);
@@ -106,15 +114,18 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const rawMinMatches = body?.minMatchesForRanking;
     const rawEloKFactor = body?.eloKFactor;
+    const rawRankingMode = body?.rankingMode;
     const hasMinMatches = rawMinMatches !== undefined;
     const hasEloKFactor = rawEloKFactor !== undefined;
+    const hasRankingMode = rawRankingMode !== undefined;
 
-    if (!hasMinMatches && !hasEloKFactor) {
+    if (!hasMinMatches && !hasEloKFactor && !hasRankingMode) {
       return jsonResponse({ error: 'No settings provided' }, 400);
     }
 
     let minMatchesValue: number | null = null;
     let eloKFactorValue: number | null = null;
+    let rankingModeValue: RankingMode | null = null;
 
     if (hasMinMatches) {
       const parsedMinMatches = Number.parseInt(String(rawMinMatches), 10);
@@ -132,25 +143,35 @@ export async function POST(req: NextRequest) {
       eloKFactorValue = parsedEloKFactor;
     }
 
+    if (hasRankingMode) {
+      if (!isRankingMode(rawRankingMode)) {
+        return jsonResponse({ error: 'rankingMode must be one of: elo, wins, win_rate, points_scored' }, 400);
+      }
+      rankingModeValue = rawRankingMode;
+    }
+
     const result = await sql`
-      INSERT INTO organization_settings (organization_id, min_matches_for_ranking, elo_k_factor, updated_at)
+      INSERT INTO organization_settings (organization_id, min_matches_for_ranking, elo_k_factor, ranking_mode, updated_at)
       VALUES (
         ${currentUser.organizationId},
         ${hasMinMatches ? minMatchesValue : DEFAULT_MIN_MATCHES},
         ${hasEloKFactor ? eloKFactorValue : DEFAULT_ELO_K_FACTOR},
+        ${hasRankingMode ? rankingModeValue : DEFAULT_RANKING_MODE},
         NOW()
       )
       ON CONFLICT (organization_id) DO UPDATE SET
         min_matches_for_ranking = COALESCE(${minMatchesValue}, organization_settings.min_matches_for_ranking),
         elo_k_factor = COALESCE(${eloKFactorValue}, organization_settings.elo_k_factor),
+        ranking_mode = COALESCE(${rankingModeValue}, organization_settings.ranking_mode),
         updated_at = NOW()
-      RETURNING min_matches_for_ranking, elo_k_factor;
+      RETURNING min_matches_for_ranking, elo_k_factor, ranking_mode;
     `;
 
     return jsonResponse({
       success: true,
       minMatchesForRanking: result[0]?.min_matches_for_ranking ?? minMatchesValue ?? DEFAULT_MIN_MATCHES,
-      eloKFactor: result[0]?.elo_k_factor ?? eloKFactorValue ?? DEFAULT_ELO_K_FACTOR
+      eloKFactor: result[0]?.elo_k_factor ?? eloKFactorValue ?? DEFAULT_ELO_K_FACTOR,
+      rankingMode: (result[0]?.ranking_mode as RankingMode) ?? rankingModeValue ?? DEFAULT_RANKING_MODE
     });
   } catch (error) {
     console.error('Settings API error:', error);

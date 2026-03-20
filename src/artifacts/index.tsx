@@ -40,10 +40,12 @@ const ChampionshipManager = () => {
   const {
     minMatchesForRanking,
     eloKFactor,
+    rankingMode,
     isLoading: isSettingsLoading,
     isSaving: isSettingsSaving,
     updateMinMatchesForRanking,
-    updateEloKFactor
+    updateEloKFactor,
+    updateRankingMode
   } = useSettings();
   
   // Use the simplified cloud-only data management
@@ -642,6 +644,7 @@ const ChampionshipManager = () => {
               <RankingsTab 
                 players={selectedSeasonPlayers} 
                 minMatchesForRanking={minMatchesForRanking}
+                rankingMode={rankingMode}
                 onPlayerClick={handlePlayerClick}
                 onPlayerStatsClick={handlePlayerStatsClick}
               />
@@ -674,6 +677,7 @@ const ChampionshipManager = () => {
                 players={selectedSeasonPlayers}
                 matchFilterPlayerId={matchFilterPlayerId}
                 setMatchFilterPlayerId={setMatchFilterPlayerId}
+                rankingMode={rankingMode}
                 onDeleteMatch={handleDeleteMatch}
                 onPlayerStatsClick={handlePlayerStatsClick}
                 canEditMatches={isViewingCurrentSeason}
@@ -685,6 +689,7 @@ const ChampionshipManager = () => {
                 players={players}
                 matches={matches}
                 minMatchesForRanking={minMatchesForRanking}
+                rankingMode={rankingMode}
                 currentSeasonId={currentSeasonId}
                 selectedSeasonId={effectiveSeasonId}
                 onSelectSeason={handleSelectSeason}
@@ -709,10 +714,12 @@ const ChampionshipManager = () => {
                 error={error}
                 minMatchesForRanking={minMatchesForRanking}
                 eloKFactor={eloKFactor}
+                rankingMode={rankingMode}
                 isSettingsLoading={isSettingsLoading}
                 isSettingsSaving={isSettingsSaving}
                 onUpdateMinMatchesForRanking={updateMinMatchesForRanking}
                 onUpdateEloKFactor={updateEloKFactor}
+                onUpdateRankingMode={updateRankingMode}
                 currentSeason={currentSeason}
                 onUpdateCurrentSeasonName={handleUpdateCurrentSeasonName}
                 isSeasonSaving={isSeasonSaving}
@@ -735,6 +742,7 @@ const ChampionshipManager = () => {
           player={selectedPlayerForStats}
           matches={selectedSeasonMatches}
           minMatchesForRanking={minMatchesForRanking}
+          rankingMode={rankingMode}
           isOpen={isPlayerStatsModalOpen}
           onClose={closePlayerStatsModal}
         />

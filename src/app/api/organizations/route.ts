@@ -161,8 +161,8 @@ async function handleOrganizationRegistration(
     `;
 
     await sql`
-      INSERT INTO organization_settings (organization_id, min_matches_for_ranking)
-      VALUES (${organization.id}, 10)
+      INSERT INTO organization_settings (organization_id, min_matches_for_ranking, elo_k_factor, ranking_mode)
+      VALUES (${organization.id}, 10, 32, 'elo')
       ON CONFLICT (organization_id) DO NOTHING;
     `;
 

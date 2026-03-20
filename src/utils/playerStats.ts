@@ -23,7 +23,9 @@ export const buildPlayerStats = (
       elo: 1200,
       matches: 0,
       wins: 0,
-      losses: 0
+      losses: 0,
+      pointsScored: 0,
+      pointsConceded: 0
     });
     const nameKey = normalizeName(player.name);
     if (nameKey) {
@@ -39,6 +41,10 @@ export const buildPlayerStats = (
     match.teams.forEach((team, teamIndex) => {
       const didWin = match.winnerIndex !== null && match.winnerIndex === teamIndex;
       const isTie = match.winnerIndex === null;
+      const teamScore = match.scores[teamIndex] ?? 0;
+      const opponentScore = match.scores
+        .filter((_, index) => index !== teamIndex)
+        .reduce((sum, score) => sum + (score ?? 0), 0);
 
       team.forEach(playerRef => {
         const resolvedId = normalizePlayerId(playerRef.id)
@@ -53,6 +59,8 @@ export const buildPlayerStats = (
           matches: 0,
           wins: 0,
           losses: 0,
+          pointsScored: 0,
+          pointsConceded: 0,
           organization_id: match.organization_id
         };
 
@@ -62,7 +70,9 @@ export const buildPlayerStats = (
           elo: stats.elo + eloDelta,
           matches: stats.matches + 1,
           wins: stats.wins + (!isTie && didWin ? 1 : 0),
-          losses: stats.losses + (!isTie && !didWin ? 1 : 0)
+          losses: stats.losses + (!isTie && !didWin ? 1 : 0),
+          pointsScored: (stats.pointsScored ?? 0) + teamScore,
+          pointsConceded: (stats.pointsConceded ?? 0) + opponentScore
         };
 
         statsById.set(playerRef.id, updated);
