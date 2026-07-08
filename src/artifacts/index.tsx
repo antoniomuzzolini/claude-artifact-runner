@@ -1,10 +1,10 @@
 ﻿"use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Trophy, PlusCircle, BarChart3, Settings, Calendar, AlertTriangle, Users } from 'lucide-react';
+import { Trophy, PlusCircle, BarChart3, Settings, Calendar, AlertTriangle, Users, Swords } from 'lucide-react';
 
 // Import types
-import { Match, NewMatch, AppData, Player } from '../types/championship';
+import { Match, NewMatch, AppData, Player, Tournament } from '../types/championship';
 
 // Import hooks
 import { useNeonDB } from '../hooks/useNeonDB';
@@ -19,6 +19,12 @@ import {
   calculateMultiTeamEloChanges
 } from '../utils/gameLogic';
 import { buildPlayerStats } from '../utils/playerStats';
+import {
+  ResolvedSlot,
+  createTournamentSlots,
+  generateNextSwissRound,
+  orderParticipants
+} from '../utils/tournament';
 
 // Import tab components
 import RankingsTab from '../components/tabs/RankingsTab';
@@ -27,6 +33,8 @@ import HistoryTab from '../components/tabs/HistoryTab';
 import StorageTab from '../components/tabs/StorageTab';
 import SeasonsTab from '../components/tabs/SeasonsTab';
 import PlayersTab from '../components/tabs/PlayersTab';
+import TournamentsTab from '../components/tabs/TournamentsTab';
+import { TournamentDraft } from '../components/tournament/TournamentWizard';
 import UserMenu from '../components/auth/UserMenu';
 import AuthWrapper from '../components/auth/AuthWrapper';
 import PlayerStatsModal from '../components/PlayerStatsModal';
@@ -53,6 +61,7 @@ const ChampionshipManager = () => {
     players,
     matches,
     seasons,
+    tournaments,
     currentSeasonId,
     lastSaved,
     isOnline,
@@ -61,12 +70,14 @@ const ChampionshipManager = () => {
     error,
     setPlayers,
     setMatches,
+    setTournaments,
     setIsAutoSaveEnabled,
     exportDataToFile,
     importDataFromFile,
     resetAll,
     refreshData,
-    deleteMatch
+    deleteMatch,
+    deleteTournament
   } = useNeonDB();
 
   // Local state for UI
@@ -74,7 +85,7 @@ const ChampionshipManager = () => {
     teams: [[''], ['']],
     scores: [0, 0]
   });
-  const [activeTab, setActiveTab] = useState<'rankings' | 'new-match' | 'history' | 'seasons' | 'players' | 'storage'>('rankings');
+  const [activeTab, setActiveTab] = useState<'rankings' | 'new-match' | 'history' | 'tournaments' | 'seasons' | 'players' | 'storage'>('rankings');
   const [matchFilterPlayerId, setMatchFilterPlayerId] = useState<number | null>(null);
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null);
   const [isSeasonSaving, setIsSeasonSaving] = useState(false);
@@ -103,6 +114,14 @@ const ChampionshipManager = () => {
   const allTimePlayers = useMemo(() => (
     buildPlayerStats(players, matches, null)
   ), [players, matches]);
+
+  const seasonTournaments = useMemo(() => (
+    effectiveSeasonId
+      ? tournaments
+          .filter(tournament => tournament.season_id === effectiveSeasonId)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      : []
+  ), [tournaments, effectiveSeasonId]);
   const isViewingCurrentSeason = !!currentSeasonId && effectiveSeasonId === currentSeasonId;
   const currentSeason = seasons.find(season => season.id === currentSeasonId) || null;
   const seasonOptions = [...seasons].sort((a, b) => {
@@ -222,6 +241,142 @@ const ChampionshipManager = () => {
     alert('Match added successfully!');
   };
 
+  // Create a tournament (structure only; matches are created as results come in)
+  const handleCreateTournament = (draft: TournamentDraft): number | null => {
+    if (!organization || !currentSeasonId || !isViewingCurrentSeason) {
+      alert('You can only create tournaments in the current season.');
+      return null;
+    }
+    if (user?.role !== 'superuser') {
+      alert('Only administrators can create tournaments.');
+      return null;
+    }
+
+    const eloById = new Map(selectedSeasonPlayers.map(player => [player.id, player.elo]));
+    const seededIds = orderParticipants(draft.participantIds, draft.seeding, eloById);
+    const slots = createTournamentSlots(draft.format, seededIds, draft.config);
+
+    let tournamentId = Date.now() + Math.floor(Math.random() * 1000);
+    const existingIds = new Set(tournaments.map(tournament => tournament.id));
+    while (existingIds.has(tournamentId)) {
+      tournamentId += Math.floor(Math.random() * 1000) + 1;
+    }
+
+    const tournament: Tournament = {
+      id: tournamentId,
+      name: draft.name,
+      format: draft.format,
+      seeding: draft.seeding,
+      participantIds: seededIds,
+      config: draft.config,
+      slots,
+      organization_id: organization.id,
+      season_id: currentSeasonId,
+      createdBy: user?.id,
+      createdAt: new Date().toISOString()
+    };
+
+    setTournaments(prev => [tournament, ...prev]);
+    return tournamentId;
+  };
+
+  // Record a tournament match result: creates a regular match (counts for ELO)
+  // and links it to the tournament slot
+  const handleRecordTournamentResult = (
+    tournament: Tournament,
+    slot: ResolvedSlot,
+    homeScore: number,
+    awayScore: number
+  ) => {
+    if (!organization || !currentSeasonId || !isViewingCurrentSeason || tournament.season_id !== currentSeasonId) {
+      alert('You can only record tournament results in the current season.');
+      return;
+    }
+    if (slot.homePlayerId === null || slot.awayPlayerId === null) return;
+    if (slot.phase === 'knockout' && homeScore === awayScore) {
+      alert('Draws are not allowed in knockout matches.');
+      return;
+    }
+
+    const seasonStatsById = new Map(selectedSeasonPlayers.map(player => [player.id, player]));
+    const basePlayerById = new Map(players.map(player => [player.id, player]));
+    const resolveSeasonPlayer = (playerId: number): Player | null => {
+      const seasonPlayer = seasonStatsById.get(playerId);
+      if (seasonPlayer) return seasonPlayer;
+      const basePlayer = basePlayerById.get(playerId);
+      if (!basePlayer) return null;
+      return { ...basePlayer, elo: 1200, matches: 0, wins: 0, losses: 0 };
+    };
+
+    const homePlayer = resolveSeasonPlayer(slot.homePlayerId);
+    const awayPlayer = resolveSeasonPlayer(slot.awayPlayerId);
+    if (!homePlayer || !awayPlayer) {
+      alert('Tournament player not found.');
+      return;
+    }
+
+    const scores = [homeScore, awayScore];
+    const { winnerIndex, eloChanges } = calculateMultiTeamEloChanges(
+      [[homePlayer], [awayPlayer]],
+      scores,
+      eloKFactor
+    );
+
+    let matchId = Date.now() + Math.floor(Math.random() * 1000);
+    const existingMatchIds = new Set(matches.map(match => match.id));
+    while (existingMatchIds.has(matchId)) {
+      matchId += Math.floor(Math.random() * 1000) + 1;
+    }
+
+    const match: Match = {
+      id: matchId,
+      date: new Date().toLocaleDateString('en-US'),
+      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      teams: [
+        [{ id: homePlayer.id, name: homePlayer.name }],
+        [{ id: awayPlayer.id, name: awayPlayer.name }]
+      ],
+      scores,
+      winnerIndex,
+      eloChanges,
+      createdBy: user?.id,
+      organization_id: organization.id,
+      season_id: currentSeasonId
+    };
+
+    setMatches(prev => [match, ...prev]);
+    setTournaments(prev => prev.map(item => (
+      item.id === tournament.id
+        ? {
+            ...item,
+            slots: item.slots.map(existingSlot => (
+              existingSlot.id === slot.id
+                ? { ...existingSlot, matchId }
+                : existingSlot
+            ))
+          }
+        : item
+    )));
+  };
+
+  const handleGenerateNextSwissRound = (tournament: Tournament) => {
+    const newSlots = generateNextSwissRound(tournament, matches);
+    if (!newSlots || newSlots.length === 0) return;
+    setTournaments(prev => prev.map(item => (
+      item.id === tournament.id
+        ? { ...item, slots: [...item.slots, ...newSlots] }
+        : item
+    )));
+  };
+
+  const handleDeleteTournament = async (tournament: Tournament) => {
+    const confirmMessage = `Are you sure you want to delete the tournament "${tournament.name}"?\n\nMatches already played will remain in the season history.`;
+    if (!window.confirm(confirmMessage)) {
+      return false;
+    }
+    return deleteTournament(tournament.id);
+  };
+
   // Filter matches by player
   const filteredMatches = matchFilterPlayerId !== null
     ? selectedSeasonMatches.filter(match => 
@@ -285,6 +440,23 @@ const ChampionshipManager = () => {
         // This would require implementing ELO recalculation logic
       }
     }
+  };
+
+  // Add a player without recording a match (needed to seed tournaments from scratch)
+  const handleAddPlayer = (name: string) => {
+    if (!organization) {
+      return { success: false, error: 'Organization context not available.' };
+    }
+    const trimmed = name.trim();
+    if (!trimmed) {
+      return { success: false, error: 'Player name cannot be empty.' };
+    }
+    const isDuplicate = players.some(player => normalizeName(player.name) === normalizeName(trimmed));
+    if (isDuplicate) {
+      return { success: false, error: 'A player with that name already exists.' };
+    }
+    findOrCreatePlayer(trimmed, players, setPlayers, organization.id);
+    return { success: true };
   };
 
   const handleRenamePlayer = async (playerId: number, newName: string) => {
@@ -578,13 +750,14 @@ const ChampionshipManager = () => {
               { id: 'rankings', name: 'Rankings', Icon: Trophy },
               ...(isViewingCurrentSeason ? [{ id: 'new-match', name: 'New Match', Icon: PlusCircle }] : []),
               { id: 'history', name: 'History', Icon: BarChart3 },
+              { id: 'tournaments', name: 'Tournaments', Icon: Swords },
               { id: 'seasons', name: 'Seasons', Icon: Calendar },
               ...(user?.role === 'superuser' ? [{ id: 'players', name: 'Players', Icon: Users }] : []),
               ...(user?.role === 'superuser' ? [{ id: 'storage', name: 'Settings', Icon: Settings }] : []),
             ].map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as 'rankings' | 'new-match' | 'history' | 'seasons' | 'players' | 'storage')}
+                onClick={() => setActiveTab(tab.id as 'rankings' | 'new-match' | 'history' | 'tournaments' | 'seasons' | 'players' | 'storage')}
                 className={`${
                   activeTab === tab.id
                     ? 'border-blue-500 text-blue-600 dark:text-blue-400'
@@ -683,6 +856,20 @@ const ChampionshipManager = () => {
                 canEditMatches={isViewingCurrentSeason}
               />
             )}
+            {activeTab === 'tournaments' && (
+              <TournamentsTab
+                tournaments={seasonTournaments}
+                players={allTimePlayers}
+                matches={matches}
+                canCreate={user?.role === 'superuser' && isViewingCurrentSeason}
+                canRecordResults={isViewingCurrentSeason}
+                canManage={user?.role === 'superuser'}
+                onCreateTournament={handleCreateTournament}
+                onRecordResult={handleRecordTournamentResult}
+                onGenerateNextRound={handleGenerateNextSwissRound}
+                onDeleteTournament={handleDeleteTournament}
+              />
+            )}
             {activeTab === 'seasons' && (
               <SeasonsTab
                 seasons={seasons}
@@ -702,6 +889,7 @@ const ChampionshipManager = () => {
               <PlayersTab
                 players={allTimePlayers}
                 onRenamePlayer={handleRenamePlayer}
+                onAddPlayer={handleAddPlayer}
               />
             )}
             {activeTab === 'storage' && user?.role === 'superuser' && (

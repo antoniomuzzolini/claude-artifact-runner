@@ -1,19 +1,22 @@
 "use client";
 
 import React, { useMemo, useState } from 'react';
-import { Pencil, Save, X, Users } from 'lucide-react';
+import { Pencil, Save, X, Users, UserPlus } from 'lucide-react';
 import { Player } from '../../types/championship';
 
 interface PlayersTabProps {
   players: Player[];
   onRenamePlayer: (playerId: number, newName: string) => Promise<{ success: boolean; error?: string }>;
+  onAddPlayer: (name: string) => { success: boolean; error?: string };
 }
 
 const PlayersTab: React.FC<PlayersTabProps> = ({
   players,
-  onRenamePlayer
+  onRenamePlayer,
+  onAddPlayer
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [newPlayerName, setNewPlayerName] = useState('');
   const [editingPlayerId, setEditingPlayerId] = useState<number | null>(null);
   const [draftName, setDraftName] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -54,6 +57,16 @@ const PlayersTab: React.FC<PlayersTabProps> = ({
     handleCancelEdit();
   };
 
+  const handleAdd = () => {
+    setErrorMessage(null);
+    const result = onAddPlayer(newPlayerName);
+    if (!result.success) {
+      setErrorMessage(result.error || 'Failed to add player.');
+      return;
+    }
+    setNewPlayerName('');
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 mb-2">
@@ -61,7 +74,7 @@ const PlayersTab: React.FC<PlayersTabProps> = ({
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Players</h2>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Search</label>
           <input
@@ -70,6 +83,25 @@ const PlayersTab: React.FC<PlayersTabProps> = ({
             placeholder="Search player name"
             className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            value={newPlayerName}
+            onChange={(e) => setNewPlayerName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleAdd();
+            }}
+            placeholder="New player name"
+            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button
+            onClick={handleAdd}
+            disabled={!newPlayerName.trim()}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white text-sm rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <UserPlus className="w-4 h-4" />
+            Add Player
+          </button>
         </div>
       </div>
 

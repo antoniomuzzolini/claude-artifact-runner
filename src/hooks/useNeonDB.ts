@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { AppData, Player, Match, Season } from '../types/championship';
+import { AppData, Player, Match, Season, Tournament } from '../types/championship';
 import { useAuth } from './useAuth';
 
 const resolveWinnerIndex = (scores: number[], winnerIndex?: number | null) => {
@@ -144,11 +144,35 @@ const normalizeMatches = (
   return rawMatches.map(match => normalizeMatch(match, lookup, resolvedSeasonId));
 };
 
+const normalizeTournaments = (raw: unknown): Tournament[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map(entry => {
+      if (!entry || typeof entry !== 'object') return null;
+      const tournament = entry as Tournament;
+      const id = Number(tournament.id);
+      const seasonId = Number(tournament.season_id);
+      if (!Number.isFinite(id)) return null;
+      return {
+        ...tournament,
+        id,
+        season_id: Number.isFinite(seasonId) ? seasonId : 0,
+        participantIds: Array.isArray(tournament.participantIds)
+          ? tournament.participantIds.map(Number).filter(Number.isFinite)
+          : [],
+        slots: Array.isArray(tournament.slots) ? tournament.slots : [],
+        config: tournament.config ?? { pointsWin: 3, pointsDraw: 1 }
+      };
+    })
+    .filter((tournament): tournament is Tournament => !!tournament);
+};
+
 export const useNeonDB = () => {
   const { makeAuthenticatedRequest, isAuthenticated } = useAuth();
   const [players, setPlayers] = useState<Player[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [currentSeasonId, setCurrentSeasonId] = useState<number | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(false);
@@ -178,6 +202,7 @@ export const useNeonDB = () => {
           players,
           matches,
           seasons,
+          tournaments,
           currentSeasonId
         }),
       });
@@ -198,7 +223,7 @@ export const useNeonDB = () => {
     } finally {
       setIsSyncing(false);
     }
-  }, [players, matches, seasons, currentSeasonId, isOnline, isAuthenticated, makeAuthenticatedRequest]);
+  }, [players, matches, seasons, tournaments, currentSeasonId, isOnline, isAuthenticated, makeAuthenticatedRequest]);
 
   // Load data directly from cloud database
   const loadData = useCallback(async () => {
@@ -252,6 +277,7 @@ export const useNeonDB = () => {
               id: Number(season.id)
             }))
           );
+          setTournaments(normalizeTournaments(cloudData.tournaments));
           setCurrentSeasonId(resolvedSeasonId);
           setLastSaved(cloudData.lastSaved ? new Date(cloudData.lastSaved) : null);
           console.log('â˜ï¸ Data loaded from Neon DB');
@@ -260,6 +286,7 @@ export const useNeonDB = () => {
           setPlayers([]);
           setMatches([]);
           setSeasons([]);
+          setTournaments([]);
           setCurrentSeasonId(null);
           setLastSaved(null);
           console.log('ðŸ“Š No data found - starting fresh');
@@ -285,6 +312,7 @@ export const useNeonDB = () => {
         players,
         matches,
         seasons,
+        tournaments,
         currentSeasonId,
         lastSaved: new Date().toISOString(),
         version: '1.0'
@@ -357,9 +385,10 @@ export const useNeonDB = () => {
           id: Number(season.id)
         }))
       );
+      setTournaments(normalizeTournaments(data.tournaments));
       setCurrentSeasonId(resolvedSeasonId);
       setLastSaved(new Date());
-      
+
       // Save to cloud database
       const response = await makeAuthenticatedRequest('/api/sync', {
         method: 'POST',
@@ -367,6 +396,7 @@ export const useNeonDB = () => {
           players: data.players,
           matches: data.matches,
           seasons: data.seasons || [],
+          tournaments: data.tournaments || [],
           currentSeasonId: Number.isFinite(Number(data.currentSeasonId)) ? Number(data.currentSeasonId) : null
         }),
       });
@@ -410,6 +440,7 @@ export const useNeonDB = () => {
       if (response.ok) {
         setPlayers([]);
         setMatches([]);
+        setTournaments([]);
         setLastSaved(null);
         console.log('âœ… All data cleared from Neon DB');
       } else {
@@ -470,6 +501,44 @@ export const useNeonDB = () => {
     }
   };
 
+  // Delete a specific tournament (its matches remain as regular matches)
+  const deleteTournament = async (tournamentId: number) => {
+    if (!isAuthenticated) {
+      setError('Authentication required');
+      return false;
+    }
+
+    if (!isOnline) {
+      setError('Cannot delete - database not available');
+      return false;
+    }
+
+    setIsSyncing(true);
+    setError(null);
+
+    try {
+      const response = await makeAuthenticatedRequest('/api/tournaments', {
+        method: 'DELETE',
+        body: JSON.stringify({ tournamentId }),
+      });
+
+      if (response.ok) {
+        setTournaments(prev => prev.filter(tournament => tournament.id !== tournamentId));
+        return true;
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to delete tournament');
+        return false;
+      }
+    } catch (error) {
+      console.error('Error deleting tournament:', error);
+      setError('Error deleting tournament');
+      return false;
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   // Check connection status periodically
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -505,10 +574,10 @@ export const useNeonDB = () => {
   // Auto-save when data changes (only if online and authenticated)
   useEffect(() => {
     if (!isAutoSaveEnabled) return;
-    if ((players.length > 0 || matches.length > 0) && isOnline && isAuthenticated) {
+    if ((players.length > 0 || matches.length > 0 || tournaments.length > 0) && isOnline && isAuthenticated) {
       saveData();
     }
-  }, [players, matches, isOnline, isAuthenticated, saveData, isAutoSaveEnabled]);
+  }, [players, matches, tournaments, isOnline, isAuthenticated, saveData, isAutoSaveEnabled]);
 
   // Load data on mount when authenticated
   useEffect(() => {
@@ -521,6 +590,7 @@ export const useNeonDB = () => {
     players,
     matches,
     seasons,
+    tournaments,
     currentSeasonId,
     lastSaved,
     isOnline,
@@ -530,6 +600,7 @@ export const useNeonDB = () => {
     setPlayers,
     setMatches,
     setSeasons,
+    setTournaments,
     setCurrentSeasonId,
     setIsAutoSaveEnabled,
     exportDataToFile,
@@ -537,6 +608,7 @@ export const useNeonDB = () => {
     resetAll,
     refreshData,
     saveData, // Expose for manual save
-    deleteMatch
+    deleteMatch,
+    deleteTournament
   };
 }; 

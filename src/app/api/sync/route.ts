@@ -185,7 +185,37 @@ async function ensureSeasonsSchema() {
   await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS teams JSONB;`;
   await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS scores INTEGER[];`;
   await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS winner_index INTEGER;`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS tournaments (
+      id BIGINT PRIMARY KEY,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      season_id BIGINT,
+      name VARCHAR(255) NOT NULL,
+      format VARCHAR(32) NOT NULL,
+      seeding VARCHAR(16) NOT NULL,
+      participant_ids JSONB NOT NULL,
+      config JSONB NOT NULL,
+      slots JSONB NOT NULL,
+      created_by INTEGER,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `;
 }
+
+const transformTournamentRow = (row: Record<string, any>) => ({
+  id: Number(row.id),
+  name: row.name,
+  format: row.format,
+  seeding: row.seeding,
+  participantIds: Array.isArray(row.participant_ids) ? row.participant_ids.map(Number) : [],
+  config: row.config ?? {},
+  slots: Array.isArray(row.slots) ? row.slots : [],
+  organization_id: row.organization_id,
+  season_id: Number(row.season_id),
+  createdBy: row.created_by ?? undefined,
+  createdAt: row.created_at?.toISOString ? row.created_at.toISOString() : row.created_at
+});
 
 async function ensureCurrentSeason(organizationId: number) {
   await ensureSeasonsSchema();
@@ -285,11 +315,18 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const seasons = await sql`
-      SELECT * FROM seasons
-      WHERE organization_id = ${currentUser.organizationId}
-      ORDER BY start_date DESC
-    `;
+    const [seasons, tournaments] = await Promise.all([
+      sql`
+        SELECT * FROM seasons
+        WHERE organization_id = ${currentUser.organizationId}
+        ORDER BY start_date DESC
+      `,
+      sql`
+        SELECT * FROM tournaments
+        WHERE organization_id = ${currentUser.organizationId}
+        ORDER BY created_at DESC
+      `
+    ]);
 
     const transformedSeasons = seasons.map(season => ({
       id: Number(season.id),
@@ -304,6 +341,7 @@ export async function GET(req: NextRequest) {
       players,
       matches: transformedMatches,
       seasons: transformedSeasons,
+      tournaments: tournaments.map(transformTournamentRow),
       currentSeasonId: Number.isFinite(resolvedCurrentSeasonId) ? resolvedCurrentSeasonId : null,
       lastSaved: new Date().toISOString()
     });
@@ -319,7 +357,13 @@ export async function POST(req: NextRequest) {
     const { currentUser, error } = getCurrentUser(req);
     if (error) return error;
 
-    const { players: playersData, matches: matchesData, seasons: seasonsData, currentSeasonId } = await req.json();
+    const {
+      players: playersData,
+      matches: matchesData,
+      seasons: seasonsData,
+      tournaments: tournamentsData,
+      currentSeasonId
+    } = await req.json();
 
     if (!playersData || !matchesData) {
       return jsonResponse({ error: 'Invalid data format' }, 400);
@@ -358,6 +402,39 @@ export async function POST(req: NextRequest) {
         SET is_current = (id = ${effectiveSeasonId})
         WHERE organization_id = ${currentUser.organizationId}
       `;
+    }
+
+    if (Array.isArray(tournamentsData)) {
+      for (const tournament of tournamentsData) {
+        const tournamentId = Number(tournament.id);
+        const tournamentSeasonId = Number(tournament.season_id);
+        if (!Number.isFinite(tournamentId)) continue;
+        await sql`
+          INSERT INTO tournaments (id, organization_id, season_id, name, format, seeding, participant_ids, config, slots, created_by, created_at)
+          VALUES (
+            ${tournamentId},
+            ${currentUser.organizationId},
+            ${Number.isFinite(tournamentSeasonId) ? tournamentSeasonId : effectiveSeasonId},
+            ${tournament.name},
+            ${tournament.format},
+            ${tournament.seeding},
+            ${JSON.stringify(tournament.participantIds ?? [])},
+            ${JSON.stringify(tournament.config ?? {})},
+            ${JSON.stringify(tournament.slots ?? [])},
+            ${tournament.createdBy || currentUser.userId},
+            ${tournament.createdAt || new Date().toISOString()}
+          )
+          ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name,
+            format = EXCLUDED.format,
+            seeding = EXCLUDED.seeding,
+            participant_ids = EXCLUDED.participant_ids,
+            config = EXCLUDED.config,
+            slots = EXCLUDED.slots,
+            season_id = EXCLUDED.season_id
+          WHERE tournaments.organization_id = ${currentUser.organizationId}
+        `;
+      }
     }
 
     if (Array.isArray(playersData)) {
@@ -434,7 +511,8 @@ export async function DELETE(req: NextRequest) {
 
     await Promise.all([
       sql`DELETE FROM matches WHERE organization_id = ${currentUser.organizationId}`,
-      sql`DELETE FROM players WHERE organization_id = ${currentUser.organizationId}`
+      sql`DELETE FROM players WHERE organization_id = ${currentUser.organizationId}`,
+      sql`DELETE FROM tournaments WHERE organization_id = ${currentUser.organizationId}`
     ]);
     
     return jsonResponse({ success: true, message: 'All data cleared for your organization' });

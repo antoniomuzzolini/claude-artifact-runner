@@ -52,13 +52,57 @@ export interface Season {
   isCurrent?: boolean;
 }
 
+export type TournamentFormat = 'single_elimination' | 'round_robin' | 'groups_knockout' | 'swiss';
+export type TournamentSeedingMode = 'random' | 'elo' | 'manual';
+export type TournamentPhase = 'round_robin' | 'group' | 'knockout' | 'swiss';
+
+export type SlotSource =
+  | { kind: 'player'; playerId: number }
+  | { kind: 'winner'; slotId: string }
+  | { kind: 'qualifier'; group: number; rank: number }
+  | { kind: 'bye' };
+
+export interface TournamentSlot {
+  id: string;
+  phase: TournamentPhase;
+  round: number; // 1-based
+  position: number; // 0-based within round
+  group?: number; // 0-based, group phase only
+  home: SlotSource;
+  away: SlotSource;
+  matchId: number | null; // linked Match once the result is recorded
+}
+
+export interface TournamentConfig {
+  groupCount?: number;
+  qualifiersPerGroup?: number;
+  swissRounds?: number;
+  pointsWin: number;
+  pointsDraw: number;
+}
+
+export interface Tournament {
+  id: number;
+  name: string;
+  format: TournamentFormat;
+  seeding: TournamentSeedingMode;
+  participantIds: number[]; // in seed order
+  config: TournamentConfig;
+  slots: TournamentSlot[];
+  organization_id: number;
+  season_id: number;
+  createdBy?: number;
+  createdAt: string;
+}
+
 export interface AppData {
   players: Player[];
   matches: Match[];
   seasons?: Season[];
+  tournaments?: Tournament[];
   currentSeasonId?: number | null;
   lastSaved: string;
   version?: string;
   exportDate?: string;
   organization?: Organization;
-} 
+}
