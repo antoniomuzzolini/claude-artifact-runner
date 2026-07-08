@@ -124,9 +124,13 @@ const normalizeMatch = (
   const winnerIndex = resolveWinnerIndex(scores, match.winnerIndex ?? null);
   const rawEloChanges = (match as Match).eloChanges ?? (match as Match & { elo_changes?: unknown }).elo_changes ?? {};
   const eloChanges = normalizeEloChanges(rawEloChanges, lookup);
+  // BIGINT ids come back from Postgres as strings; tournaments link slots to
+  // matches by numeric id, so coerce here
+  const parsedMatchId = Number(match.id);
 
   return {
     ...match,
+    id: Number.isFinite(parsedMatchId) ? parsedMatchId : match.id,
     teams,
     scores,
     winnerIndex,
@@ -160,7 +164,14 @@ const normalizeTournaments = (raw: unknown): Tournament[] => {
         participantIds: Array.isArray(tournament.participantIds)
           ? tournament.participantIds.map(Number).filter(Number.isFinite)
           : [],
-        slots: Array.isArray(tournament.slots) ? tournament.slots : [],
+        slots: Array.isArray(tournament.slots)
+          ? tournament.slots.map(slot => ({
+              ...slot,
+              matchId: slot.matchId === null || slot.matchId === undefined
+                ? null
+                : Number(slot.matchId)
+            }))
+          : [],
         config: tournament.config ?? { pointsWin: 3, pointsDraw: 1 }
       };
     })

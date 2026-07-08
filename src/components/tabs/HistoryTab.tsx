@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import React from 'react';
-import { Clock, Trash2, Crown } from 'lucide-react';
+import { Clock, Trash2, Crown, Trophy } from 'lucide-react';
 import { Player, Match } from '../../types/championship';
 import { RankingMode } from '../../utils/ranking';
 import { useAuth } from '../../hooks/useAuth';
@@ -15,6 +15,7 @@ interface HistoryTabProps {
   onDeleteMatch: (match: Match) => void;
   onPlayerStatsClick?: (playerId: number) => void;
   canEditMatches?: boolean;
+  tournamentLabelByMatchId?: Map<number, string>;
 }
 
 const HistoryTab: React.FC<HistoryTabProps> = ({
@@ -25,7 +26,8 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
   rankingMode,
   onDeleteMatch,
   onPlayerStatsClick,
-  canEditMatches = true
+  canEditMatches = true,
+  tournamentLabelByMatchId
 }) => {
   const { permissions, user } = useAuth();
   const selectedPlayer = matchFilterPlayerId !== null
@@ -93,12 +95,18 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
             >
               {/* Match Header */}
               <div className="bg-gray-50 dark:bg-gray-700 px-4 py-3 border-b dark:border-gray-600">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
+                <div className="flex justify-between items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 min-w-0">
                     <Clock className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                     <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">
                       {new Date(match.date).toLocaleDateString('en-UK')} at {match.time}
                     </span>
+                    {tournamentLabelByMatchId?.has(match.id) && (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 rounded-full truncate">
+                        <Trophy className="w-3 h-3 shrink-0" />
+                        {tournamentLabelByMatchId.get(match.id)}
+                      </span>
+                    )}
                   </div>
                   <div className="text-lg font-bold text-gray-900 dark:text-white">
                     {match.scores.join(' - ')}

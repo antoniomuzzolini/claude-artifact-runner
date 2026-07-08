@@ -1,12 +1,15 @@
 "use client";
 
-import React, { useMemo } from 'react';
-import { ArrowLeft, Crown, PlusCircle, Trash2 } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, Crown, Lock, Pencil, PlusCircle, RadioTower, Trash2, Trophy } from 'lucide-react';
 import { Match, Player, Tournament } from '../../types/championship';
 import {
   ResolvedSlot,
   computeTournamentState,
-  formatLabel
+  formatLabel,
+  groupLetter,
+  knockoutRoundLabel,
+  slotContextLabel
 } from '../../utils/tournament';
 import BracketView from './BracketView';
 import StandingsTable from './StandingsTable';
@@ -19,20 +22,40 @@ interface TournamentDetailProps {
   canRecordResults: boolean;
   canManage: boolean;
   onRecordResult: (tournament: Tournament, slot: ResolvedSlot, homeScore: number, awayScore: number) => void;
+  onUpdateResult: (tournament: Tournament, slot: ResolvedSlot, homeScore: number, awayScore: number) => void;
   onGenerateNextRound: (tournament: Tournament) => void;
   onDelete: (tournament: Tournament) => void;
+  onRefresh: () => void;
   onBack: () => void;
 }
+
+type DetailTab = 'standings' | 'bracket' | 'scores';
+
+const AUTO_REFRESH_INTERVAL_MS = 15000;
+
+const sideName = (
+  playerId: number | null,
+  isBye: boolean,
+  placeholder: string | null,
+  getPlayerName: (playerId: number) => string
+) => {
+  if (isBye) return 'Bye';
+  if (playerId !== null) return getPlayerName(playerId);
+  return placeholder ?? 'TBD';
+};
 
 const MatchRow: React.FC<{
   slot: ResolvedSlot;
   getPlayerName: (playerId: number) => string;
   allowDraw: boolean;
   canRecordResults: boolean;
+  canEdit?: boolean;
   onRecordResult: (slot: ResolvedSlot, homeScore: number, awayScore: number) => void;
-}> = ({ slot, getPlayerName, allowDraw, canRecordResults, onRecordResult }) => {
-  const homeName = slot.homePlayerId !== null ? getPlayerName(slot.homePlayerId) : 'TBD';
-  const awayName = slot.awayIsBye ? 'Bye' : (slot.awayPlayerId !== null ? getPlayerName(slot.awayPlayerId) : 'TBD');
+  onUpdateResult: (slot: ResolvedSlot, homeScore: number, awayScore: number) => void;
+}> = ({ slot, getPlayerName, allowDraw, canRecordResults, canEdit = true, onRecordResult, onUpdateResult }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const homeName = sideName(slot.homePlayerId, slot.homeIsBye, slot.homePlaceholder, getPlayerName);
+  const awayName = sideName(slot.awayPlayerId, slot.awayIsBye, slot.awayPlaceholder, getPlayerName);
 
   const scoreFor = (playerId: number | null): number | null => {
     if (!slot.match || playerId === null) return null;
@@ -44,24 +67,61 @@ const MatchRow: React.FC<{
   const awayScore = scoreFor(slot.awayPlayerId);
   const homeWon = slot.winnerPlayerId !== null && slot.winnerPlayerId === slot.homePlayerId;
   const awayWon = slot.winnerPlayerId !== null && slot.winnerPlayerId === slot.awayPlayerId;
+  const homeUnresolved = slot.homeIsBye || slot.homePlayerId === null;
+  const awayUnresolved = slot.awayIsBye || slot.awayPlayerId === null;
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/40">
       <div className="flex items-center gap-2 text-sm min-w-0">
-        <span className={`truncate ${homeWon ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'}`}>
+        <span className={`truncate ${homeWon ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'} ${homeUnresolved ? 'italic text-gray-400 dark:text-gray-500' : ''}`}>
           {homeName}
         </span>
         <span className="text-gray-400 dark:text-gray-500 text-xs">vs</span>
-        <span className={`truncate ${awayWon ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'} ${slot.awayIsBye ? 'italic text-gray-400 dark:text-gray-500' : ''}`}>
+        <span className={`truncate ${awayWon ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'} ${awayUnresolved ? 'italic text-gray-400 dark:text-gray-500' : ''}`}>
           {awayName}
         </span>
       </div>
-      {slot.status === 'done' && homeScore !== null && awayScore !== null && (
-        <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">
-          {homeScore} - {awayScore}
-          {slot.isDraw && <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">Draw</span>}
+
+      {slot.status === 'done' && homeScore !== null && awayScore !== null && !isEditing && (
+        <span className="flex items-center gap-2">
+          <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">
+            {homeScore} - {awayScore}
+            {slot.isDraw && <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">Draw</span>}
+          </span>
+          {canRecordResults && canEdit && (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="p-1 rounded text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors duration-200"
+              aria-label="Edit result"
+              title="Edit result"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {canRecordResults && !canEdit && (
+            <Lock
+              className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600"
+              aria-label="Result locked"
+            />
+          )}
         </span>
       )}
+
+      {slot.status === 'done' && isEditing && (
+        <SlotScoreEntry
+          homeName={homeName}
+          awayName={awayName}
+          allowDraw={allowDraw}
+          initialHomeScore={homeScore ?? 0}
+          initialAwayScore={awayScore ?? 0}
+          onCancel={() => setIsEditing(false)}
+          onSubmit={(hs, as) => {
+            onUpdateResult(slot, hs, as);
+            setIsEditing(false);
+          }}
+        />
+      )}
+
       {slot.status === 'bye' && (
         <span className="text-xs text-gray-500 dark:text-gray-400">Free win</span>
       )}
@@ -85,8 +145,11 @@ const RoundsList: React.FC<{
   getPlayerName: (playerId: number) => string;
   allowDraw: boolean;
   canRecordResults: boolean;
+  roundLabel?: (round: number) => string;
+  isSlotEditable?: (slot: ResolvedSlot) => boolean;
   onRecordResult: (slot: ResolvedSlot, homeScore: number, awayScore: number) => void;
-}> = ({ slots, getPlayerName, allowDraw, canRecordResults, onRecordResult }) => {
+  onUpdateResult: (slot: ResolvedSlot, homeScore: number, awayScore: number) => void;
+}> = ({ slots, getPlayerName, allowDraw, canRecordResults, roundLabel, isSlotEditable, onRecordResult, onUpdateResult }) => {
   const rounds = useMemo(() => {
     const byRound = new Map<number, ResolvedSlot[]>();
     slots.forEach(slot => {
@@ -102,7 +165,7 @@ const RoundsList: React.FC<{
       {rounds.map(([round, roundSlots]) => (
         <div key={round}>
           <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-            Round {round}
+            {roundLabel ? roundLabel(round) : `Round ${round}`}
           </div>
           <div className="space-y-2">
             {roundSlots.map(slot => (
@@ -112,7 +175,9 @@ const RoundsList: React.FC<{
                 getPlayerName={getPlayerName}
                 allowDraw={allowDraw}
                 canRecordResults={canRecordResults}
+                canEdit={isSlotEditable ? isSlotEditable(slot) : true}
                 onRecordResult={onRecordResult}
+                onUpdateResult={onUpdateResult}
               />
             ))}
           </div>
@@ -122,6 +187,26 @@ const RoundsList: React.FC<{
   );
 };
 
+const PodiumStep: React.FC<{
+  place: string;
+  names: string[];
+  heightClass: string;
+  colorClass: string;
+  medal: string;
+}> = ({ place, names, heightClass, colorClass, medal }) => (
+  <div className="flex flex-col items-center gap-2 w-28 sm:w-36">
+    <div className="text-2xl" aria-hidden="true">{medal}</div>
+    <div className="text-sm font-semibold text-gray-900 dark:text-white text-center leading-tight">
+      {names.map(name => (
+        <div key={name} className="truncate max-w-full">{name}</div>
+      ))}
+    </div>
+    <div className={`w-full rounded-t-md flex items-start justify-center pt-1.5 text-xs font-bold text-white/90 ${heightClass} ${colorClass}`}>
+      {place}
+    </div>
+  </div>
+);
+
 const TournamentDetail: React.FC<TournamentDetailProps> = ({
   tournament,
   matches,
@@ -129,8 +214,10 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
   canRecordResults,
   canManage,
   onRecordResult,
+  onUpdateResult,
   onGenerateNextRound,
   onDelete,
+  onRefresh,
   onBack
 }) => {
   const state = useMemo(
@@ -148,11 +235,72 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
   const groupSlots = state.slots.filter(slot => slot.phase === 'group');
   const roundRobinSlots = state.slots.filter(slot => slot.phase === 'round_robin');
   const swissSlots = state.slots.filter(slot => slot.phase === 'swiss');
+  const totalKnockoutRounds = knockoutSlots.reduce((max, slot) => Math.max(max, slot.round), 0);
   const groupCount = tournament.config.groupCount ?? 0;
   const totalPlayable = state.playedMatches + state.pendingMatches;
+  // Editing locks: group results freeze once the knockout stage has results
+  // (they determine the qualifiers); swiss results freeze once the next round
+  // is generated (they determine the pairings)
+  const hasKnockoutResults = knockoutSlots.some(slot => slot.matchId !== null);
+
+  const hasStandings = tournament.format !== 'single_elimination';
+  const hasBracket = tournament.format === 'single_elimination' || tournament.format === 'groups_knockout';
+  const availableTabs = useMemo(() => {
+    const tabs: { id: DetailTab; label: string }[] = [];
+    if (hasStandings) {
+      tabs.push({ id: 'standings', label: tournament.format === 'groups_knockout' ? 'Groups' : 'Standings' });
+    }
+    if (hasBracket) tabs.push({ id: 'bracket', label: 'Bracket' });
+    tabs.push({ id: 'scores', label: 'Scores' });
+    return tabs;
+  }, [hasStandings, hasBracket, tournament.format]);
+
+  const [activeTab, setActiveTab] = useState<DetailTab>(availableTabs[0].id);
+  const [isAutoRefreshOn, setIsAutoRefreshOn] = useState(false);
+
+  // "Live" mode: keep standings/bracket up to date when results are entered
+  // from other devices (e.g. tournament shown on a shared screen)
+  useEffect(() => {
+    if (!isAutoRefreshOn) return;
+    const interval = setInterval(() => {
+      onRefresh();
+    }, AUTO_REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [isAutoRefreshOn, onRefresh]);
+
+  // Podium: KO formats use final/semifinal results, points formats use standings
+  const podium = useMemo(() => {
+    if (!state.isComplete || state.championId === null) return null;
+    const loserOf = (slot: ResolvedSlot): number | null => {
+      if (slot.winnerPlayerId === null) return null;
+      return slot.winnerPlayerId === slot.homePlayerId ? slot.awayPlayerId : slot.homePlayerId;
+    };
+
+    if (tournament.format === 'single_elimination' || tournament.format === 'groups_knockout') {
+      const finalSlot = knockoutSlots.find(slot => slot.round === totalKnockoutRounds && slot.position === 0);
+      const second = finalSlot ? loserOf(finalSlot) : null;
+      const thirds = totalKnockoutRounds >= 2
+        ? knockoutSlots
+            .filter(slot => slot.round === totalKnockoutRounds - 1)
+            .map(loserOf)
+            .filter((playerId): playerId is number => playerId !== null)
+        : [];
+      return { first: state.championId, second, thirds };
+    }
+
+    const rows = state.standings ?? [];
+    return {
+      first: state.championId,
+      second: rows[1]?.playerId ?? null,
+      thirds: rows[2] ? [rows[2].playerId] : []
+    };
+  }, [state, tournament.format, knockoutSlots, totalKnockoutRounds]);
 
   const handleRecord = (slot: ResolvedSlot, homeScore: number, awayScore: number) => {
     onRecordResult(tournament, slot, homeScore, awayScore);
+  };
+  const handleUpdate = (slot: ResolvedSlot, homeScore: number, awayScore: number) => {
+    onUpdateResult(tournament, slot, homeScore, awayScore);
   };
 
   return (
@@ -184,6 +332,19 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
               {getPlayerName(state.championId)}
             </span>
           )}
+          <button
+            onClick={() => setIsAutoRefreshOn(prev => !prev)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border transition-colors duration-200 ${
+              isAutoRefreshOn
+                ? 'text-green-700 dark:text-green-300 border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20'
+                : 'text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+            }`}
+            title="Automatically reload results every 15 seconds"
+          >
+            <RadioTower className="w-4 h-4" />
+            {isAutoRefreshOn ? 'Live' : 'Live off'}
+            {isAutoRefreshOn && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
+          </button>
           {canManage && (
             <button
               onClick={() => onDelete(tournament)}
@@ -196,106 +357,187 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
         </div>
       </div>
 
-      {tournament.format === 'single_elimination' && (
-        <BracketView
-          slots={knockoutSlots}
-          getPlayerName={getPlayerName}
-          canRecordResults={canRecordResults}
-          onRecordResult={handleRecord}
-        />
+      {podium && (
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-gradient-to-b from-amber-50 to-white dark:from-amber-900/20 dark:to-gray-800 p-6">
+          <div className="flex items-center justify-center gap-2 mb-5 text-amber-700 dark:text-amber-300 font-semibold">
+            <Trophy className="w-5 h-5" />
+            Tournament complete
+          </div>
+          <div className="flex items-end justify-center gap-2 sm:gap-4">
+            {podium.second !== null && (
+              <PodiumStep
+                place="2nd"
+                names={[getPlayerName(podium.second)]}
+                heightClass="h-16"
+                colorClass="bg-gray-400 dark:bg-gray-500"
+                medal="🥈"
+              />
+            )}
+            <PodiumStep
+              place="1st"
+              names={[getPlayerName(podium.first)]}
+              heightClass="h-24"
+              colorClass="bg-amber-400 dark:bg-amber-500"
+              medal="🥇"
+            />
+            {podium.thirds.length > 0 && (
+              <PodiumStep
+                place="3rd"
+                names={podium.thirds.map(getPlayerName)}
+                heightClass="h-12"
+                colorClass="bg-orange-400 dark:bg-orange-600"
+                medal="🥉"
+              />
+            )}
+          </div>
+        </div>
       )}
 
-      {tournament.format === 'round_robin' && state.standings && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">Standings</h3>
-            <StandingsTable rows={state.standings} getPlayerName={getPlayerName} />
+      {/* Sub-tabs */}
+      <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700">
+        {availableTabs.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors duration-200 ${
+              activeTab === tab.id
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Standings / Groups tab */}
+      {activeTab === 'standings' && hasStandings && (
+        tournament.format === 'groups_knockout' ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {Array.from({ length: groupCount }, (_, groupIndex) => (
+              <StandingsTable
+                key={groupIndex}
+                rows={state.groupStandings[groupIndex] ?? []}
+                getPlayerName={getPlayerName}
+                qualifiedCount={tournament.config.qualifiersPerGroup ?? 0}
+                title={`Group ${groupLetter(groupIndex)}`}
+              />
+            ))}
           </div>
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">Matches</h3>
+        ) : (
+          state.standings && (
+            <div className="max-w-2xl">
+              <StandingsTable rows={state.standings} getPlayerName={getPlayerName} />
+              {tournament.format === 'swiss' && (
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  Rounds played: {state.swissRoundsGenerated}/{tournament.config.swissRounds ?? state.swissRoundsGenerated}
+                </p>
+              )}
+            </div>
+          )
+        )
+      )}
+
+      {/* Bracket tab */}
+      {activeTab === 'bracket' && hasBracket && (
+        <div>
+          {tournament.format === 'groups_knockout' && !state.isGroupPhaseComplete && (
+            <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+              The bracket fills in as group matches are completed.
+            </p>
+          )}
+          <BracketView slots={knockoutSlots} getPlayerName={getPlayerName} />
+        </div>
+      )}
+
+      {/* Scores tab */}
+      {activeTab === 'scores' && (
+        <div className="space-y-8 max-w-3xl">
+          {tournament.format === 'single_elimination' && (
+            <RoundsList
+              slots={knockoutSlots.filter(slot => slot.status !== 'bye')}
+              getPlayerName={getPlayerName}
+              allowDraw={false}
+              canRecordResults={canRecordResults}
+              roundLabel={(round) => knockoutRoundLabel(round, totalKnockoutRounds)}
+              onRecordResult={handleRecord}
+              onUpdateResult={handleUpdate}
+            />
+          )}
+
+          {tournament.format === 'round_robin' && (
             <RoundsList
               slots={roundRobinSlots}
               getPlayerName={getPlayerName}
               allowDraw
               canRecordResults={canRecordResults}
               onRecordResult={handleRecord}
+              onUpdateResult={handleUpdate}
             />
-          </div>
-        </div>
-      )}
+          )}
 
-      {tournament.format === 'groups_knockout' && (
-        <div className="space-y-8">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">Group Stage</h3>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {tournament.format === 'groups_knockout' && (
+            <>
               {Array.from({ length: groupCount }, (_, groupIndex) => (
-                <div key={groupIndex} className="space-y-3">
-                  <StandingsTable
-                    rows={state.groupStandings[groupIndex] ?? []}
-                    getPlayerName={getPlayerName}
-                    qualifiedCount={tournament.config.qualifiersPerGroup ?? 0}
-                    title={`Group ${String.fromCharCode(65 + groupIndex)}`}
-                  />
+                <div key={groupIndex}>
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">
+                    Group {groupLetter(groupIndex)}
+                  </h3>
                   <RoundsList
                     slots={groupSlots.filter(slot => slot.group === groupIndex)}
                     getPlayerName={getPlayerName}
                     allowDraw
                     canRecordResults={canRecordResults}
+                    isSlotEditable={() => !hasKnockoutResults}
                     onRecordResult={handleRecord}
+                    onUpdateResult={handleUpdate}
                   />
                 </div>
               ))}
-            </div>
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">
-              Knockout Stage
-              {!state.isGroupPhaseComplete && (
-                <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
-                  (unlocks when all group matches are played)
-                </span>
-              )}
-            </h3>
-            <BracketView
-              slots={knockoutSlots}
-              getPlayerName={getPlayerName}
-              canRecordResults={canRecordResults && state.isGroupPhaseComplete}
-              onRecordResult={handleRecord}
-            />
-          </div>
-        </div>
-      )}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">
+                  Knockout Stage
+                  {!state.isGroupPhaseComplete && (
+                    <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
+                      (unlocks when all group matches are played)
+                    </span>
+                  )}
+                </h3>
+                <RoundsList
+                  slots={knockoutSlots.filter(slot => slot.status !== 'bye')}
+                  getPlayerName={getPlayerName}
+                  allowDraw={false}
+                  canRecordResults={canRecordResults}
+                  roundLabel={(round) => knockoutRoundLabel(round, totalKnockoutRounds)}
+                  onRecordResult={handleRecord}
+                  onUpdateResult={handleUpdate}
+                />
+              </div>
+            </>
+          )}
 
-      {tournament.format === 'swiss' && state.standings && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">Standings</h3>
-            <StandingsTable rows={state.standings} getPlayerName={getPlayerName} />
-          </div>
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
-                Rounds ({state.swissRoundsGenerated}/{tournament.config.swissRounds ?? state.swissRoundsGenerated})
-              </h3>
+          {tournament.format === 'swiss' && (
+            <div>
               {canRecordResults && state.canGenerateNextSwissRound && (
                 <button
                   onClick={() => onGenerateNextRound(tournament)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 dark:bg-blue-500 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors duration-200"
+                  className="mb-4 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 dark:bg-blue-500 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors duration-200"
                 >
                   <PlusCircle className="w-4 h-4" />
-                  Generate next round
+                  Generate round {state.swissRoundsGenerated + 1}
                 </button>
               )}
+              <RoundsList
+                slots={swissSlots}
+                getPlayerName={getPlayerName}
+                allowDraw
+                canRecordResults={canRecordResults}
+                isSlotEditable={(slot) => slot.round === state.swissRoundsGenerated}
+                onRecordResult={handleRecord}
+                onUpdateResult={handleUpdate}
+              />
             </div>
-            <RoundsList
-              slots={swissSlots}
-              getPlayerName={getPlayerName}
-              allowDraw
-              canRecordResults={canRecordResults}
-              onRecordResult={handleRecord}
-            />
-          </div>
+          )}
         </div>
       )}
     </div>

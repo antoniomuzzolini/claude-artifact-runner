@@ -2,49 +2,36 @@
 
 import React from 'react';
 import { ResolvedSlot, knockoutRoundLabel } from '../../utils/tournament';
-import SlotScoreEntry from './SlotScoreEntry';
 
 interface BracketViewProps {
   slots: ResolvedSlot[]; // knockout slots only
   getPlayerName: (playerId: number) => string;
-  canRecordResults: boolean;
-  onRecordResult: (slot: ResolvedSlot, homeScore: number, awayScore: number) => void;
 }
-
-const sideLabel = (
-  playerId: number | null,
-  isBye: boolean,
-  getPlayerName: (playerId: number) => string
-) => {
-  if (isBye) return 'Bye';
-  if (playerId === null) return 'TBD';
-  return getPlayerName(playerId);
-};
 
 const BracketSlotCard: React.FC<{
   slot: ResolvedSlot;
   getPlayerName: (playerId: number) => string;
-  canRecordResults: boolean;
-  onRecordResult: BracketViewProps['onRecordResult'];
-}> = ({ slot, getPlayerName, canRecordResults, onRecordResult }) => {
-  const homeLabel = sideLabel(slot.homePlayerId, slot.homeIsBye, getPlayerName);
-  const awayLabel = sideLabel(slot.awayPlayerId, slot.awayIsBye, getPlayerName);
-  const scores = slot.match?.scores ?? null;
-
+}> = ({ slot, getPlayerName }) => {
   const scoreFor = (playerId: number | null): number | null => {
-    if (!slot.match || !scores || playerId === null) return null;
+    if (!slot.match || playerId === null) return null;
     const teamIndex = slot.match.teams.findIndex(team => team.some(member => member.id === playerId));
-    return teamIndex === -1 ? null : scores[teamIndex] ?? null;
+    return teamIndex === -1 ? null : slot.match.scores[teamIndex] ?? null;
   };
 
-  const renderSide = (playerId: number | null, isBye: boolean, label: string) => {
+  const renderSide = (
+    playerId: number | null,
+    isBye: boolean,
+    placeholder: string | null
+  ) => {
     const isWinner = slot.winnerPlayerId !== null && playerId === slot.winnerPlayerId;
+    const isUnresolved = isBye || playerId === null;
+    const label = isBye ? 'Bye' : (playerId !== null ? getPlayerName(playerId) : placeholder ?? 'TBD');
     const score = scoreFor(playerId);
     return (
       <div className={`flex items-center justify-between gap-2 px-3 py-1.5 ${
         isWinner ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'
       }`}>
-        <span className={`truncate ${isBye || playerId === null ? 'italic text-gray-400 dark:text-gray-500' : ''}`}>
+        <span className={`truncate ${isUnresolved ? 'italic text-gray-400 dark:text-gray-500 text-xs' : ''}`}>
           {label}
         </span>
         {score !== null && (
@@ -57,34 +44,54 @@ const BracketSlotCard: React.FC<{
   };
 
   return (
-    <div className={`w-52 rounded-lg border text-sm ${
+    <div className={`w-full rounded-lg border text-sm ${
       slot.status === 'ready'
-        ? 'border-blue-300 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-900/10'
+        ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-900/10 shadow-sm'
         : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
     }`}>
-      {renderSide(slot.homePlayerId, slot.homeIsBye, homeLabel)}
+      {renderSide(slot.homePlayerId, slot.homeIsBye, slot.homePlaceholder)}
       <div className="border-t border-gray-100 dark:border-gray-700/60" />
-      {renderSide(slot.awayPlayerId, slot.awayIsBye, awayLabel)}
-      {slot.status === 'ready' && canRecordResults && (
-        <div className="px-3 pb-2">
-          <SlotScoreEntry
-            homeName={homeLabel}
-            awayName={awayLabel}
-            allowDraw={false}
-            onSubmit={(homeScore, awayScore) => onRecordResult(slot, homeScore, awayScore)}
-          />
-        </div>
-      )}
+      {renderSide(slot.awayPlayerId, slot.awayIsBye, slot.awayPlaceholder)}
     </div>
   );
 };
 
-const BracketView: React.FC<BracketViewProps> = ({
-  slots,
-  getPlayerName,
-  canRecordResults,
-  onRecordResult
-}) => {
+// Connector lines between a round with 2n matches and the next round with n
+// matches. Column layout uses equal flex bands, so slot centers sit at fixed
+// fractional heights — the SVG (stretched, non-scaling stroke) can draw the
+// classic bracket joins without measuring the DOM.
+const RoundConnector: React.FC<{ matchesInNextRound: number }> = ({ matchesInNextRound }) => (
+  <div className="flex flex-col w-8 shrink-0">
+    <div className="h-4 mb-3" />
+    <div className="flex-1 relative text-gray-300 dark:text-gray-600">
+      <svg
+        className="absolute inset-0 w-full h-full"
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        {Array.from({ length: matchesInNextRound }, (_, position) => {
+          const n = matchesInNextRound;
+          const yTop = ((2 * position + 0.5) / (2 * n)) * 100;
+          const yBottom = ((2 * position + 1.5) / (2 * n)) * 100;
+          const yTarget = ((position + 0.5) / n) * 100;
+          return (
+            <path
+              key={position}
+              d={`M 0 ${yTop} H 50 V ${yBottom} H 0 M 50 ${yTarget} H 100`}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              vectorEffect="non-scaling-stroke"
+            />
+          );
+        })}
+      </svg>
+    </div>
+  </div>
+);
+
+const BracketView: React.FC<BracketViewProps> = ({ slots, getPlayerName }) => {
   const totalRounds = slots.reduce((max, slot) => Math.max(max, slot.round), 0);
   const rounds = Array.from({ length: totalRounds }, (_, index) =>
     slots
@@ -94,24 +101,23 @@ const BracketView: React.FC<BracketViewProps> = ({
 
   return (
     <div className="overflow-x-auto pb-2">
-      <div className="flex gap-8 min-w-max">
+      <div className="flex min-w-max items-stretch">
         {rounds.map((roundSlots, roundIndex) => (
-          <div key={roundIndex} className="flex flex-col">
-            <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3 text-center">
-              {knockoutRoundLabel(roundIndex + 1, totalRounds)}
+          <React.Fragment key={roundIndex}>
+            {roundIndex > 0 && <RoundConnector matchesInNextRound={roundSlots.length} />}
+            <div className="flex flex-col w-52">
+              <div className="h-4 mb-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-center">
+                {knockoutRoundLabel(roundIndex + 1, totalRounds)}
+              </div>
+              <div className="flex flex-col flex-1">
+                {roundSlots.map(slot => (
+                  <div key={slot.id} className="flex-1 flex items-center py-1.5">
+                    <BracketSlotCard slot={slot} getPlayerName={getPlayerName} />
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="flex flex-col justify-around flex-1 gap-4">
-              {roundSlots.map(slot => (
-                <BracketSlotCard
-                  key={slot.id}
-                  slot={slot}
-                  getPlayerName={getPlayerName}
-                  canRecordResults={canRecordResults}
-                  onRecordResult={onRecordResult}
-                />
-              ))}
-            </div>
-          </div>
+          </React.Fragment>
         ))}
       </div>
     </div>

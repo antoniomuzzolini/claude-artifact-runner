@@ -221,6 +221,42 @@ console.log('swiss (7 players, 3 rounds)');
   check('champion is player 1', final.championId === 1);
 }
 
+// --- placeholders -------------------------------------------------------------
+console.log('placeholder labels');
+{
+  const ko = makeTournament('single_elimination', [1, 2, 3, 4]);
+  const koState = computeTournamentState(ko, []);
+  const final = koState.slots.find(slot => slot.round === 2)!;
+  check('final shows "Winner of SF1/SF2"',
+    final.homePlaceholder === 'Winner of SF1' && final.awayPlaceholder === 'Winner of SF2');
+
+  const groups = makeTournament('groups_knockout', [1, 2, 3, 4, 5, 6, 7, 8], {
+    groupCount: 2,
+    qualifiersPerGroup: 2
+  });
+  const groupsState = computeTournamentState(groups, []);
+  const koPlaceholders = groupsState.slots
+    .filter(slot => slot.phase === 'knockout' && slot.round === 1)
+    .flatMap(slot => [slot.homePlaceholder, slot.awayPlaceholder]);
+  check('KO round 1 shows group qualifiers', (
+    koPlaceholders.includes('1st Group A')
+    && koPlaceholders.includes('2nd Group B')
+    && koPlaceholders.every(label => label !== null)
+  ));
+}
+
+// --- string ids from Postgres BIGINT ------------------------------------------
+console.log('string match ids (as returned by the DB) still resolve');
+{
+  const tournament = makeTournament('round_robin', [1, 2, 3]);
+  const matches: Match[] = [];
+  playOut(tournament, matches);
+  const withStringIds = matches.map(match => ({ ...match, id: String(match.id) as unknown as number }));
+  const state = computeTournamentState(tournament, withStringIds);
+  check('all slots resolve with string match ids', state.slots.every(slot => slot.status === 'done'));
+  check('champion still resolved', state.championId === 1);
+}
+
 // --- match deletion resilience ----------------------------------------------
 console.log('deleted match resets a slot to ready');
 {

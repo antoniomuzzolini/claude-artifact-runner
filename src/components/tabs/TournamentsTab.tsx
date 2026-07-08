@@ -16,8 +16,10 @@ interface TournamentsTabProps {
   canManage: boolean;
   onCreateTournament: (draft: TournamentDraft) => number | null;
   onRecordResult: (tournament: Tournament, slot: ResolvedSlot, homeScore: number, awayScore: number) => void;
+  onUpdateResult: (tournament: Tournament, slot: ResolvedSlot, homeScore: number, awayScore: number) => void;
   onGenerateNextRound: (tournament: Tournament) => void;
   onDeleteTournament: (tournament: Tournament) => Promise<boolean>;
+  onRefresh: () => void;
 }
 
 const TournamentsTab: React.FC<TournamentsTabProps> = ({
@@ -29,8 +31,10 @@ const TournamentsTab: React.FC<TournamentsTabProps> = ({
   canManage,
   onCreateTournament,
   onRecordResult,
+  onUpdateResult,
   onGenerateNextRound,
-  onDeleteTournament
+  onDeleteTournament,
+  onRefresh
 }) => {
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [selectedTournamentId, setSelectedTournamentId] = useState<number | null>(null);
@@ -57,13 +61,16 @@ const TournamentsTab: React.FC<TournamentsTabProps> = ({
   if (selectedTournament) {
     return (
       <TournamentDetail
+        key={selectedTournament.id}
         tournament={selectedTournament}
         matches={matches}
         players={players}
         canRecordResults={canRecordResults}
         canManage={canManage}
         onRecordResult={onRecordResult}
+        onUpdateResult={onUpdateResult}
         onGenerateNextRound={onGenerateNextRound}
+        onRefresh={onRefresh}
         onDelete={async (tournament) => {
           const deleted = await onDeleteTournament(tournament);
           if (deleted) {

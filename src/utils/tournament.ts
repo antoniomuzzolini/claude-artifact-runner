@@ -344,6 +344,8 @@ export interface ResolvedSlot extends TournamentSlot {
   awayPlayerId: number | null;
   homeIsBye: boolean;
   awayIsBye: boolean;
+  homePlaceholder: string | null; // e.g. "Winner of SF1", "1st Group A" (when unresolved)
+  awayPlaceholder: string | null;
   match: Match | null;
   winnerPlayerId: number | null;
   isDraw: boolean;
@@ -488,9 +490,26 @@ export const computeTournamentState = (
   tournament: Tournament,
   matches: Match[]
 ): TournamentState => {
-  const matchById = new Map(matches.map(match => [match.id, match]));
+  // ids may arrive as strings (Postgres BIGINT) — compare numerically
+  const matchById = new Map(matches.map(match => [Number(match.id), match]));
   const seedIndexById = new Map(tournament.participantIds.map((id, index) => [id, index]));
   const resolvedById = new Map<string, ResolvedSlot>();
+  const slotById = new Map(tournament.slots.map(slot => [slot.id, slot]));
+  const totalKnockoutRounds = tournament.slots
+    .filter(slot => slot.phase === 'knockout')
+    .reduce((max, slot) => Math.max(max, slot.round), 0);
+
+  const placeholderFor = (source: SlotSource): string | null => {
+    if (source.kind === 'winner') {
+      const feeder = slotById.get(source.slotId);
+      if (!feeder) return null;
+      return `Winner of ${knockoutSlotShortLabel(feeder.round, totalKnockoutRounds, feeder.position)}`;
+    }
+    if (source.kind === 'qualifier') {
+      return `${ordinal(source.rank + 1)} Group ${groupLetter(source.group)}`;
+    }
+    return null;
+  };
 
   const orderedSlots = [...tournament.slots].sort((a, b) => {
     const phaseRank = (slot: TournamentSlot) => (slot.phase === 'knockout' ? 1 : 0);
@@ -524,7 +543,7 @@ export const computeTournamentState = (
   const resolveSlot = (slot: TournamentSlot): ResolvedSlot => {
     const home = resolveSource(slot.home);
     const away = resolveSource(slot.away);
-    const match = slot.matchId !== null ? matchById.get(slot.matchId) ?? null : null;
+    const match = slot.matchId !== null ? matchById.get(Number(slot.matchId)) ?? null : null;
 
     let winnerPlayerId: number | null = null;
     let isDraw = false;
@@ -553,6 +572,8 @@ export const computeTournamentState = (
       awayPlayerId: away.playerId,
       homeIsBye: home.isBye,
       awayIsBye: away.isBye,
+      homePlaceholder: home.playerId === null && !home.isBye ? placeholderFor(slot.home) : null,
+      awayPlaceholder: away.playerId === null && !away.isBye ? placeholderFor(slot.away) : null,
       match,
       winnerPlayerId,
       isDraw,
@@ -719,6 +740,37 @@ export const knockoutRoundLabel = (round: number, totalRounds: number): string =
   if (fromEnd === 1) return 'Semifinals';
   if (fromEnd === 2) return 'Quarterfinals';
   return `Round ${round}`;
+};
+
+export const ordinal = (n: number): string => {
+  if (n === 1) return '1st';
+  if (n === 2) return '2nd';
+  if (n === 3) return '3rd';
+  return `${n}th`;
+};
+
+export const groupLetter = (groupIndex: number): string => String.fromCharCode(65 + groupIndex);
+
+// Short label for a single knockout slot: "Final", "SF1", "QF2", "R1 M3"
+export const knockoutSlotShortLabel = (round: number, totalRounds: number, position: number): string => {
+  const fromEnd = totalRounds - round;
+  if (fromEnd === 0) return 'Final';
+  if (fromEnd === 1) return `SF${position + 1}`;
+  if (fromEnd === 2) return `QF${position + 1}`;
+  return `R${round} M${position + 1}`;
+};
+
+// Human context for a slot, e.g. "Semifinals", "Group A · Round 2", "Round 3"
+export const slotContextLabel = (slot: TournamentSlot, totalKnockoutRounds: number): string => {
+  if (slot.phase === 'knockout') {
+    const fromEnd = totalKnockoutRounds - slot.round;
+    if (fromEnd <= 2) return knockoutSlotShortLabel(slot.round, totalKnockoutRounds, slot.position);
+    return `Round ${slot.round} · Match ${slot.position + 1}`;
+  }
+  if (slot.phase === 'group' && slot.group !== undefined) {
+    return `Group ${groupLetter(slot.group)} · Round ${slot.round}`;
+  }
+  return `Round ${slot.round}`;
 };
 
 export const formatLabel = (format: TournamentFormat): string => {

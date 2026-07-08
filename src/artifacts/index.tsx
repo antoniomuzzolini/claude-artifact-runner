@@ -23,7 +23,8 @@ import {
   ResolvedSlot,
   createTournamentSlots,
   generateNextSwissRound,
-  orderParticipants
+  orderParticipants,
+  slotContextLabel
 } from '../utils/tournament';
 
 // Import tab components
@@ -114,6 +115,21 @@ const ChampionshipManager = () => {
   const allTimePlayers = useMemo(() => (
     buildPlayerStats(players, matches, null)
   ), [players, matches]);
+
+  // "Tournament name · round" label for each match linked to a tournament slot
+  const tournamentLabelByMatchId = useMemo(() => {
+    const labels = new Map<number, string>();
+    for (const tournament of tournaments) {
+      const knockoutRounds = tournament.slots
+        .filter(slot => slot.phase === 'knockout')
+        .reduce((max, slot) => Math.max(max, slot.round), 0);
+      for (const slot of tournament.slots) {
+        if (slot.matchId === null) continue;
+        labels.set(slot.matchId, `${tournament.name} · ${slotContextLabel(slot, knockoutRounds)}`);
+      }
+    }
+    return labels;
+  }, [tournaments]);
 
   const seasonTournaments = useMemo(() => (
     effectiveSeasonId
@@ -356,6 +372,93 @@ const ChampionshipManager = () => {
             ))
           }
         : item
+    )));
+  };
+
+  // Edit an already recorded tournament result (typo fixes). Scores, winner and
+  // this match's ELO deltas are updated; season history keeps the same match id.
+  const handleUpdateTournamentResult = (
+    tournament: Tournament,
+    slot: ResolvedSlot,
+    homeScore: number,
+    awayScore: number
+  ) => {
+    if (!organization || !currentSeasonId || !isViewingCurrentSeason || tournament.season_id !== currentSeasonId) {
+      alert('You can only edit tournament results in the current season.');
+      return;
+    }
+    if (slot.matchId === null || slot.homePlayerId === null || slot.awayPlayerId === null) return;
+    if (slot.phase === 'knockout' && homeScore === awayScore) {
+      alert('Draws are not allowed in knockout matches.');
+      return;
+    }
+
+    // Locked results: swiss rounds freeze once the next round is generated,
+    // group results freeze once the knockout stage has results
+    if (slot.phase === 'swiss') {
+      const latestSwissRound = tournament.slots
+        .filter(item => item.phase === 'swiss')
+        .reduce((max, item) => Math.max(max, item.round), 0);
+      if (slot.round < latestSwissRound) {
+        alert('This result is locked: the next round has already been generated from these standings.');
+        return;
+      }
+    }
+    if (slot.phase === 'group') {
+      const knockoutStarted = tournament.slots.some(item => item.phase === 'knockout' && item.matchId !== null);
+      if (knockoutStarted) {
+        alert('This result is locked: the knockout stage has already started from these standings.');
+        return;
+      }
+    }
+
+    const targetMatch = matches.find(match => Number(match.id) === Number(slot.matchId));
+    if (!targetMatch) return;
+
+    // Flipping a knockout winner whose next round was already played leaves the
+    // later match inconsistent — ask before proceeding
+    const newWinnerId = homeScore === awayScore
+      ? null
+      : (homeScore > awayScore ? slot.homePlayerId : slot.awayPlayerId);
+    if (slot.phase === 'knockout' && slot.winnerPlayerId !== null && newWinnerId !== slot.winnerPlayerId) {
+      const dependentPlayed = tournament.slots.some(other => (
+        other.matchId !== null && (
+          (other.home.kind === 'winner' && other.home.slotId === slot.id)
+          || (other.away.kind === 'winner' && other.away.slotId === slot.id)
+        )
+      ));
+      if (dependentPlayed && !window.confirm(
+        'This change flips the winner, but the next round has already been played and will become inconsistent.\n\nContinue anyway?'
+      )) {
+        return;
+      }
+    }
+
+    const seasonStatsById = new Map(selectedSeasonPlayers.map(player => [player.id, player]));
+    const basePlayerById = new Map(players.map(player => [player.id, player]));
+    const resolveSeasonPlayer = (playerId: number): Player | null => {
+      const seasonPlayer = seasonStatsById.get(playerId);
+      if (seasonPlayer) return seasonPlayer;
+      const basePlayer = basePlayerById.get(playerId);
+      if (!basePlayer) return null;
+      return { ...basePlayer, elo: 1200, matches: 0, wins: 0, losses: 0 };
+    };
+
+    const homePlayer = resolveSeasonPlayer(slot.homePlayerId);
+    const awayPlayer = resolveSeasonPlayer(slot.awayPlayerId);
+    if (!homePlayer || !awayPlayer) return;
+
+    const scores = [homeScore, awayScore];
+    const { winnerIndex, eloChanges } = calculateMultiTeamEloChanges(
+      [[homePlayer], [awayPlayer]],
+      scores,
+      eloKFactor
+    );
+
+    setMatches(prev => prev.map(match => (
+      Number(match.id) === Number(slot.matchId)
+        ? { ...match, scores, winnerIndex, eloChanges }
+        : match
     )));
   };
 
@@ -854,6 +957,7 @@ const ChampionshipManager = () => {
                 onDeleteMatch={handleDeleteMatch}
                 onPlayerStatsClick={handlePlayerStatsClick}
                 canEditMatches={isViewingCurrentSeason}
+                tournamentLabelByMatchId={tournamentLabelByMatchId}
               />
             )}
             {activeTab === 'tournaments' && (
@@ -866,8 +970,10 @@ const ChampionshipManager = () => {
                 canManage={user?.role === 'superuser'}
                 onCreateTournament={handleCreateTournament}
                 onRecordResult={handleRecordTournamentResult}
+                onUpdateResult={handleUpdateTournamentResult}
                 onGenerateNextRound={handleGenerateNextSwissRound}
                 onDeleteTournament={handleDeleteTournament}
+                onRefresh={refreshData}
               />
             )}
             {activeTab === 'seasons' && (
