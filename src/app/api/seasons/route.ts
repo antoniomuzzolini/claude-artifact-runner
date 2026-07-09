@@ -87,13 +87,25 @@ async function ensureCurrentSeason(organizationId: number) {
 
   const now = new Date().toISOString();
   const newId = Date.now();
+  // Guarded insert: concurrent requests for a brand-new organization must not
+  // create two "Season 1" rows
   const created = await sql`
     INSERT INTO seasons (id, organization_id, name, start_date, is_current)
-    VALUES (${newId}, ${organizationId}, ${'Season 1'}, ${now}, TRUE)
+    SELECT ${newId}, ${organizationId}, ${'Season 1'}, ${now}, TRUE
+    WHERE NOT EXISTS (SELECT 1 FROM seasons WHERE organization_id = ${organizationId})
     RETURNING *
   `;
+  if (created.length > 0) {
+    return created[0];
+  }
 
-  return created[0];
+  const retry = await sql`
+    SELECT * FROM seasons
+    WHERE organization_id = ${organizationId}
+    ORDER BY start_date DESC
+    LIMIT 1
+  `;
+  return retry[0];
 }
 
 async function backfillSeasonIds(organizationId: number, seasonId: number) {

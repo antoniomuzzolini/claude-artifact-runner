@@ -17,6 +17,7 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
   const [error, setError] = useState<string | null>(null);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [invitationUrl, setInvitationUrl] = useState<string | null>(null);
+  const [directAddMessage, setDirectAddMessage] = useState<string | null>(null);
 
   // Invite user form state
   const [newUserEmail, setNewUserEmail] = useState('');
@@ -70,15 +71,22 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
       const result = await inviteUser(newUserEmail.trim());
       
       if (result.success) {
-        // Store invited email for later use
-        setInvitedUserEmail(newUserEmail.trim());
-        
-        // Show invitation URL
-        setInvitationUrl(result.invitationUrl || '');
-        
+        if (result.addedExistingUser) {
+          // Existing account: added to this organization directly, no invitation
+          setDirectAddMessage(result.message || 'Existing user added to your organization.');
+          setInvitationUrl(null);
+          setShowInviteForm(false);
+        } else {
+          // Store invited email for later use
+          setInvitedUserEmail(newUserEmail.trim());
+
+          // Show invitation URL
+          setInvitationUrl(result.invitationUrl || '');
+        }
+
         // Reset form
         setNewUserEmail('');
-        
+
         // Refresh users list
         await fetchUsers();
       }
@@ -143,6 +151,20 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClo
           {(error || authError) && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4 mb-4">
               <div className="text-sm text-red-700 dark:text-red-400">{error || authError}</div>
+            </div>
+          )}
+
+          {/* Existing user added directly */}
+          {directAddMessage && (
+            <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 mb-6 border border-green-200 dark:border-green-800 flex items-start justify-between gap-3">
+              <p className="text-sm text-green-800 dark:text-green-300">{directAddMessage}</p>
+              <button
+                onClick={() => setDirectAddMessage(null)}
+                className="p-1 rounded text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/40"
+                aria-label="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           )}
 

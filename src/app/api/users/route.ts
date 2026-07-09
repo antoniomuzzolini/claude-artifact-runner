@@ -1,6 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 import jwt from 'jsonwebtoken';
 import { NextRequest, NextResponse } from 'next/server';
+import { ensureMembershipSchema } from '../../../lib/organizationMembers';
 
 export const runtime = 'nodejs';
 
@@ -46,11 +47,17 @@ export async function GET(req: NextRequest) {
       return jsonResponse({ error: 'User must belong to an organization' }, 403);
     }
 
+    await ensureMembershipSchema();
+
+    // Members of this organization, with their role in it (users may belong
+    // to several organizations)
     const users = await sql`
-      SELECT id, email, username, role, status, created_at, last_login, created_by, invitation_token, organization_id
-      FROM users 
-      WHERE organization_id = ${currentUser.organizationId}
-      ORDER BY created_at DESC;
+      SELECT u.id, u.email, u.username, m.role, u.status, u.created_at, u.last_login,
+             u.created_by, u.invitation_token, ${currentUser.organizationId}::integer AS organization_id
+      FROM users u
+      JOIN organization_members m ON m.user_id = u.id
+      WHERE m.organization_id = ${currentUser.organizationId}
+      ORDER BY u.created_at DESC;
     `;
 
     return jsonResponse({
@@ -94,31 +101,57 @@ export async function DELETE(req: NextRequest) {
       return jsonResponse({ error: 'User ID is required' }, 400);
     }
 
-    const targetUsers = await sql`
-      SELECT id, email, username, role, organization_id
-      FROM users 
-      WHERE id = ${userId} AND organization_id = ${currentUser.organizationId}
+    await ensureMembershipSchema();
+
+    const targetMemberships = await sql`
+      SELECT m.user_id, u.username
+      FROM organization_members m
+      JOIN users u ON u.id = m.user_id
+      WHERE m.user_id = ${userId} AND m.organization_id = ${currentUser.organizationId}
       LIMIT 1;
     `;
 
-    if (targetUsers.length === 0) {
+    if (targetMemberships.length === 0) {
       return jsonResponse({ error: 'User not found in your organization' }, 404);
     }
 
-    const targetUser = targetUsers[0];
+    const targetUser = targetMemberships[0];
 
-    if (targetUser.id === currentUser.userId) {
+    if (Number(targetUser.user_id) === Number(currentUser.userId)) {
       return jsonResponse({ error: 'Cannot delete your own account' }, 400);
     }
 
+    // Remove the user from this organization; delete the account only if they
+    // belong to no other organization
     await sql`
-      DELETE FROM users 
+      DELETE FROM organization_members
+      WHERE user_id = ${userId} AND organization_id = ${currentUser.organizationId};
+    `;
+
+    const remaining = await sql`
+      SELECT organization_id FROM organization_members
+      WHERE user_id = ${userId}
+      LIMIT 1;
+    `;
+
+    if (remaining.length === 0) {
+      await sql`DELETE FROM users WHERE id = ${userId};`;
+      return jsonResponse({
+        success: true,
+        message: `User ${targetUser.username} deleted successfully`
+      });
+    }
+
+    // Repoint their last-used organization if it was this one
+    await sql`
+      UPDATE users
+      SET organization_id = ${remaining[0].organization_id}
       WHERE id = ${userId} AND organization_id = ${currentUser.organizationId};
     `;
 
     return jsonResponse({
       success: true,
-      message: `User ${targetUser.username} deleted successfully`
+      message: `User ${targetUser.username} removed from your organization`
     });
   } catch (error) {
     console.error('Users API error:', error);

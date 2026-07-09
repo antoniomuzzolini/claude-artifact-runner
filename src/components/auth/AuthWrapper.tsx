@@ -18,7 +18,8 @@ const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
   const [invitationToken, setInvitationToken] = useState<string | null>(null);
   const [showOrganizationSetup, setShowOrganizationSetup] = useState(false);
 
-  const API_BASE = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3000';
+  // Same-origin API: relative URLs work whatever port `next dev` picks
+  const API_BASE = '';
 
   // Check if authentication setup is needed and handle invitation tokens
   useEffect(() => {

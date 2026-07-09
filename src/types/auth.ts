@@ -37,6 +37,14 @@ export interface CompleteInvitation {
   password: string;
 }
 
+// A user's membership in one organization, with the role they hold there
+export interface OrganizationMembership {
+  organization_id: number;
+  role: 'superuser' | 'user';
+  name: string;
+  domain?: string | null;
+}
+
 export interface AuthResponse {
   success: boolean;
   user?: User;
@@ -45,9 +53,11 @@ export interface AuthResponse {
   message?: string;
   invitationUrl?: string;
   organization?: Organization;
+  memberships?: OrganizationMembership[];
   email?: string;
   isPending?: boolean;
   userAlreadyRegistered?: boolean;
+  addedExistingUser?: boolean;
 }
 
 export interface AuthContext {

@@ -10,6 +10,17 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-fallback-secret-key-change-in
 const DEFAULT_MIN_MATCHES = 10;
 const DEFAULT_ELO_K_FACTOR = 32;
 
+// Tabs an organization can hide from the navigation
+const HIDEABLE_TABS = ['new-match', 'history', 'tournaments', 'seasons'] as const;
+
+const normalizeHiddenTabs = (value: unknown): string[] | null => {
+  if (!Array.isArray(value)) return null;
+  const filtered = value.filter(
+    (tab): tab is string => typeof tab === 'string' && (HIDEABLE_TABS as readonly string[]).includes(tab)
+  );
+  return Array.from(new Set(filtered));
+};
+
 const corsHeaders = {
   'Access-Control-Allow-Credentials': 'true',
   'Access-Control-Allow-Origin': '*',
@@ -61,6 +72,10 @@ async function ensureSettingsTable() {
     ALTER TABLE organization_settings
     ADD COLUMN IF NOT EXISTS ranking_mode VARCHAR(32) DEFAULT 'elo';
   `;
+  await sql`
+    ALTER TABLE organization_settings
+    ADD COLUMN IF NOT EXISTS hidden_tabs JSONB DEFAULT '[]'::jsonb;
+  `;
 }
 
 export async function GET(req: NextRequest) {
@@ -71,7 +86,7 @@ export async function GET(req: NextRequest) {
     await ensureSettingsTable();
 
     const rows = await sql`
-      SELECT min_matches_for_ranking, elo_k_factor, ranking_mode
+      SELECT min_matches_for_ranking, elo_k_factor, ranking_mode, hidden_tabs
       FROM organization_settings
       WHERE organization_id = ${currentUser.organizationId}
       LIMIT 1;
@@ -87,7 +102,8 @@ export async function GET(req: NextRequest) {
         success: true,
         minMatchesForRanking: DEFAULT_MIN_MATCHES,
         eloKFactor: DEFAULT_ELO_K_FACTOR,
-        rankingMode: DEFAULT_RANKING_MODE
+        rankingMode: DEFAULT_RANKING_MODE,
+        hiddenTabs: []
       });
     }
 
@@ -95,7 +111,8 @@ export async function GET(req: NextRequest) {
       success: true,
       minMatchesForRanking: rows[0].min_matches_for_ranking ?? DEFAULT_MIN_MATCHES,
       eloKFactor: rows[0].elo_k_factor ?? DEFAULT_ELO_K_FACTOR,
-      rankingMode: (rows[0].ranking_mode as RankingMode) ?? DEFAULT_RANKING_MODE
+      rankingMode: (rows[0].ranking_mode as RankingMode) ?? DEFAULT_RANKING_MODE,
+      hiddenTabs: normalizeHiddenTabs(rows[0].hidden_tabs) ?? []
     });
   } catch (error) {
     console.error('Settings API error:', error);
@@ -115,11 +132,13 @@ export async function POST(req: NextRequest) {
     const rawMinMatches = body?.minMatchesForRanking;
     const rawEloKFactor = body?.eloKFactor;
     const rawRankingMode = body?.rankingMode;
+    const rawHiddenTabs = body?.hiddenTabs;
     const hasMinMatches = rawMinMatches !== undefined;
     const hasEloKFactor = rawEloKFactor !== undefined;
     const hasRankingMode = rawRankingMode !== undefined;
+    const hasHiddenTabs = rawHiddenTabs !== undefined;
 
-    if (!hasMinMatches && !hasEloKFactor && !hasRankingMode) {
+    if (!hasMinMatches && !hasEloKFactor && !hasRankingMode && !hasHiddenTabs) {
       return jsonResponse({ error: 'No settings provided' }, 400);
     }
 
@@ -150,28 +169,39 @@ export async function POST(req: NextRequest) {
       rankingModeValue = rawRankingMode;
     }
 
+    let hiddenTabsValue: string[] | null = null;
+    if (hasHiddenTabs) {
+      hiddenTabsValue = normalizeHiddenTabs(rawHiddenTabs);
+      if (hiddenTabsValue === null) {
+        return jsonResponse({ error: `hiddenTabs must be an array of: ${HIDEABLE_TABS.join(', ')}` }, 400);
+      }
+    }
+
     const result = await sql`
-      INSERT INTO organization_settings (organization_id, min_matches_for_ranking, elo_k_factor, ranking_mode, updated_at)
+      INSERT INTO organization_settings (organization_id, min_matches_for_ranking, elo_k_factor, ranking_mode, hidden_tabs, updated_at)
       VALUES (
         ${currentUser.organizationId},
         ${hasMinMatches ? minMatchesValue : DEFAULT_MIN_MATCHES},
         ${hasEloKFactor ? eloKFactorValue : DEFAULT_ELO_K_FACTOR},
         ${hasRankingMode ? rankingModeValue : DEFAULT_RANKING_MODE},
+        ${JSON.stringify(hiddenTabsValue ?? [])},
         NOW()
       )
       ON CONFLICT (organization_id) DO UPDATE SET
         min_matches_for_ranking = COALESCE(${minMatchesValue}, organization_settings.min_matches_for_ranking),
         elo_k_factor = COALESCE(${eloKFactorValue}, organization_settings.elo_k_factor),
         ranking_mode = COALESCE(${rankingModeValue}, organization_settings.ranking_mode),
+        hidden_tabs = COALESCE(${hiddenTabsValue !== null ? JSON.stringify(hiddenTabsValue) : null}::jsonb, organization_settings.hidden_tabs),
         updated_at = NOW()
-      RETURNING min_matches_for_ranking, elo_k_factor, ranking_mode;
+      RETURNING min_matches_for_ranking, elo_k_factor, ranking_mode, hidden_tabs;
     `;
 
     return jsonResponse({
       success: true,
       minMatchesForRanking: result[0]?.min_matches_for_ranking ?? minMatchesValue ?? DEFAULT_MIN_MATCHES,
       eloKFactor: result[0]?.elo_k_factor ?? eloKFactorValue ?? DEFAULT_ELO_K_FACTOR,
-      rankingMode: (result[0]?.ranking_mode as RankingMode) ?? rankingModeValue ?? DEFAULT_RANKING_MODE
+      rankingMode: (result[0]?.ranking_mode as RankingMode) ?? rankingModeValue ?? DEFAULT_RANKING_MODE,
+      hiddenTabs: normalizeHiddenTabs(result[0]?.hidden_tabs) ?? hiddenTabsValue ?? []
     });
   } catch (error) {
     console.error('Settings API error:', error);

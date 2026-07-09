@@ -4,6 +4,14 @@ import React, { useEffect, useState } from 'react';
 import { Download, Upload, Cloud, Wifi, WifiOff, RefreshCw, Trash2, AlertTriangle } from 'lucide-react';
 import { Player, Match, Season } from '../../types/championship';
 import { RankingMode, RANKING_MODE_OPTIONS } from '../../utils/ranking';
+import { HideableTab, HIDEABLE_TABS } from '../../hooks/useSettings';
+
+const HIDEABLE_TAB_LABELS: Record<HideableTab, string> = {
+  'new-match': 'New Match',
+  'history': 'History',
+  'tournaments': 'Tournaments',
+  'seasons': 'Seasons'
+};
 
 interface StorageTabProps {
   players: Player[];
@@ -20,6 +28,8 @@ interface StorageTabProps {
   onUpdateMinMatchesForRanking: (value: number) => Promise<boolean>;
   onUpdateEloKFactor: (value: number) => Promise<boolean>;
   onUpdateRankingMode: (value: RankingMode) => Promise<boolean>;
+  hiddenTabs: HideableTab[];
+  onUpdateHiddenTabs: (value: HideableTab[]) => Promise<boolean>;
   currentSeason?: Season | null;
   onUpdateCurrentSeasonName?: (name: string) => Promise<boolean>;
   isSeasonSaving?: boolean;
@@ -49,6 +59,8 @@ const StorageTab: React.FC<StorageTabProps> = ({
   onUpdateMinMatchesForRanking,
   onUpdateEloKFactor,
   onUpdateRankingMode,
+  hiddenTabs,
+  onUpdateHiddenTabs,
   currentSeason,
   onUpdateCurrentSeasonName,
   isSeasonSaving = false,
@@ -74,6 +86,16 @@ const StorageTab: React.FC<StorageTabProps> = ({
   const [seasonNameInput, setSeasonNameInput] = useState<string>(currentSeason?.name || '');
   const [seasonMessage, setSeasonMessage] = useState<string | null>(null);
   const [seasonError, setSeasonError] = useState<string | null>(null);
+  const [tabsMessage, setTabsMessage] = useState<string | null>(null);
+
+  const handleToggleTab = async (tab: HideableTab) => {
+    const next = hiddenTabs.includes(tab)
+      ? hiddenTabs.filter(item => item !== tab)
+      : [...hiddenTabs, tab];
+    setTabsMessage(null);
+    const success = await onUpdateHiddenTabs(next);
+    setTabsMessage(success ? 'Tab visibility saved.' : 'Failed to save tab visibility.');
+  };
 
   useEffect(() => {
     setMinMatchesInput(String(minMatchesForRanking));
@@ -189,6 +211,43 @@ const StorageTab: React.FC<StorageTabProps> = ({
           </div>
         </div>
       )}
+
+      {/* Tab Visibility */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border dark:border-gray-700 shadow-sm">
+        <h3 className="text-lg font-semibold mb-1 text-gray-900 dark:text-white">Visible Tabs</h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          Choose which tabs everyone in the organization can see. Rankings, Players and Settings are always available.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          {HIDEABLE_TABS.map(tab => {
+            const isVisible = !hiddenTabs.includes(tab);
+            return (
+              <label
+                key={tab}
+                className={`flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer text-sm transition-colors duration-200 ${
+                  isVisible
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-gray-900 dark:text-white'
+                    : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'
+                } ${isSettingsSaving ? 'opacity-60 pointer-events-none' : ''}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isVisible}
+                  onChange={() => handleToggleTab(tab)}
+                  disabled={isSettingsSaving}
+                  className="accent-blue-600"
+                />
+                {HIDEABLE_TAB_LABELS[tab]}
+              </label>
+            );
+          })}
+        </div>
+        {tabsMessage && (
+          <p className={`mt-3 text-sm ${tabsMessage.startsWith('Failed') ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+            {tabsMessage}
+          </p>
+        )}
+      </div>
 
       {/* Ranking Settings */}
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border dark:border-gray-700 shadow-sm">

@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { AppData, Player, Match, Season, Tournament } from '../types/championship';
 import { useAuth } from './useAuth';
 
@@ -179,7 +179,10 @@ const normalizeTournaments = (raw: unknown): Tournament[] => {
 };
 
 export const useNeonDB = () => {
-  const { makeAuthenticatedRequest, isAuthenticated } = useAuth();
+  const { makeAuthenticatedRequest, isAuthenticated, token } = useAuth();
+  // Token the in-memory data was loaded with. Guards against saving one
+  // organization's state under another organization's session during a switch.
+  const loadedTokenRef = useRef<string | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
@@ -245,13 +248,14 @@ export const useNeonDB = () => {
 
     setIsSyncing(true);
     setError(null);
-    
+
     try {
       // Check if we can connect to cloud
       const response = await makeAuthenticatedRequest('/api/sync');
 
       if (response.ok) {
         setIsOnline(true);
+        loadedTokenRef.current = token;
         const cloudData = await response.json();
         
         if (cloudData) {
@@ -314,7 +318,21 @@ export const useNeonDB = () => {
     } finally {
       setIsSyncing(false);
     }
-  }, [isAuthenticated, makeAuthenticatedRequest]);
+  }, [isAuthenticated, makeAuthenticatedRequest, token]);
+
+  // When the session token changes (organization switch, re-login), drop the
+  // previous organization's data immediately: nothing stale on screen, nothing
+  // stale to auto-save
+  useEffect(() => {
+    if (loadedTokenRef.current && token && loadedTokenRef.current !== token) {
+      loadedTokenRef.current = null;
+      setPlayers([]);
+      setMatches([]);
+      setSeasons([]);
+      setTournaments([]);
+      setCurrentSeasonId(null);
+    }
+  }, [token]);
 
   // Export data to file
   const exportDataToFile = async () => {
@@ -573,22 +591,24 @@ export const useNeonDB = () => {
       }
     };
 
-    // Check immediately
-    checkConnection();
-
-    // Check every 30 seconds
+    // No immediate check: loadData already runs on mount/token change and sets
+    // isOnline — a parallel duplicate GET here raced with it on brand-new
+    // organizations, creating the initial season twice
     const interval = setInterval(checkConnection, 30000);
-    
+
     return () => clearInterval(interval);
   }, [error, isAuthenticated, makeAuthenticatedRequest]);
 
-  // Auto-save when data changes (only if online and authenticated)
+  // Auto-save when data changes (only if online and authenticated). Never save
+  // data that was loaded with a different token than the current one — during
+  // an organization switch that would write the old org's state into the new one.
   useEffect(() => {
     if (!isAutoSaveEnabled) return;
+    if (loadedTokenRef.current === null || loadedTokenRef.current !== token) return;
     if ((players.length > 0 || matches.length > 0 || tournaments.length > 0) && isOnline && isAuthenticated) {
       saveData();
     }
-  }, [players, matches, tournaments, isOnline, isAuthenticated, saveData, isAutoSaveEnabled]);
+  }, [players, matches, tournaments, isOnline, isAuthenticated, saveData, isAutoSaveEnabled, token]);
 
   // Load data on mount when authenticated
   useEffect(() => {

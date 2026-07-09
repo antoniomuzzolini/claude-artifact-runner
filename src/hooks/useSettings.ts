@@ -7,11 +7,20 @@ import { DEFAULT_RANKING_MODE, RankingMode, isRankingMode } from '../utils/ranki
 const DEFAULT_MIN_MATCHES = 10;
 const DEFAULT_ELO_K_FACTOR = 32;
 
+export type HideableTab = 'new-match' | 'history' | 'tournaments' | 'seasons';
+export const HIDEABLE_TABS: HideableTab[] = ['new-match', 'history', 'tournaments', 'seasons'];
+
+const normalizeHiddenTabs = (value: unknown): HideableTab[] =>
+  Array.isArray(value)
+    ? value.filter((tab): tab is HideableTab => HIDEABLE_TABS.includes(tab as HideableTab))
+    : [];
+
 export const useSettings = () => {
   const { makeAuthenticatedRequest, isAuthenticated } = useAuth();
   const [minMatchesForRanking, setMinMatchesForRanking] = useState<number>(DEFAULT_MIN_MATCHES);
   const [eloKFactor, setEloKFactor] = useState<number>(DEFAULT_ELO_K_FACTOR);
   const [rankingMode, setRankingMode] = useState<RankingMode>(DEFAULT_RANKING_MODE);
+  const [hiddenTabs, setHiddenTabs] = useState<HideableTab[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +47,7 @@ export const useSettings = () => {
         if (isRankingMode(data.rankingMode)) {
           setRankingMode(data.rankingMode);
         }
+        setHiddenTabs(normalizeHiddenTabs(data.hiddenTabs));
       } else {
         const data = await response.json().catch(() => ({}));
         setError(data.error || 'Failed to load settings');
@@ -49,7 +59,7 @@ export const useSettings = () => {
     }
   }, [isAuthenticated, makeAuthenticatedRequest]);
 
-  const persistSettings = useCallback(async (payload: { minMatchesForRanking?: number; eloKFactor?: number; rankingMode?: RankingMode }) => {
+  const persistSettings = useCallback(async (payload: { minMatchesForRanking?: number; eloKFactor?: number; rankingMode?: RankingMode; hiddenTabs?: HideableTab[] }) => {
     if (!isAuthenticated) {
       setError('Authentication required');
       return false;
@@ -74,6 +84,9 @@ export const useSettings = () => {
         }
         if (isRankingMode(data.rankingMode)) {
           setRankingMode(data.rankingMode);
+        }
+        if (data.hiddenTabs !== undefined) {
+          setHiddenTabs(normalizeHiddenTabs(data.hiddenTabs));
         }
         return true;
       }
@@ -104,6 +117,11 @@ export const useSettings = () => {
     [persistSettings]
   );
 
+  const updateHiddenTabs = useCallback(
+    async (value: HideableTab[]) => persistSettings({ hiddenTabs: value }),
+    [persistSettings]
+  );
+
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
@@ -112,6 +130,7 @@ export const useSettings = () => {
     minMatchesForRanking,
     eloKFactor,
     rankingMode,
+    hiddenTabs,
     isLoading,
     isSaving,
     error,
@@ -119,5 +138,6 @@ export const useSettings = () => {
     updateMinMatchesForRanking,
     updateEloKFactor,
     updateRankingMode,
+    updateHiddenTabs,
   };
 };

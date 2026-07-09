@@ -376,7 +376,14 @@ export interface TournamentState {
   isComplete: boolean;
 }
 
-const matchScoreFor = (match: Match, playerId: number): { scored: number; conceded: number; won: boolean; draw: boolean } | null => {
+interface MatchOutcome {
+  scored: number;
+  conceded: number;
+  won: boolean;
+  draw: boolean;
+}
+
+const matchScoreFor = (match: Match, playerId: number): MatchOutcome | null => {
   const teamIndex = match.teams.findIndex(team => team.some(member => member.id === playerId));
   if (teamIndex === -1) return null;
   const scored = match.scores[teamIndex] ?? 0;
@@ -387,6 +394,23 @@ const matchScoreFor = (match: Match, playerId: number): { scored: number; conced
   const won = !draw && match.winnerIndex === teamIndex;
   return { scored, conceded, won, draw };
 };
+
+// Standings points for one match outcome. 'set_based' treats scores as sets
+// won (volleyball): margin >= 2 -> 3/0, deciding set (margin 1) -> 2/1.
+export const pointsForOutcome = (outcome: MatchOutcome, config: TournamentConfig): number => {
+  if (outcome.draw) return config.pointsDraw;
+  if ((config.pointsScheme ?? 'flat') === 'set_based') {
+    const margin = Math.abs(outcome.scored - outcome.conceded);
+    if (outcome.won) return margin === 1 ? 2 : 3;
+    return margin === 1 ? 1 : 0;
+  }
+  return outcome.won ? config.pointsWin : 0;
+};
+
+// A bye counts as a full win
+const pointsForBye = (config: TournamentConfig): number => (
+  (config.pointsScheme ?? 'flat') === 'set_based' ? 3 : config.pointsWin
+);
 
 const buildStandings = (
   slots: ResolvedSlot[],
@@ -415,7 +439,7 @@ const buildStandings = (
       if (row && slot.phase === 'swiss') {
         row.played += 1;
         row.wins += 1;
-        row.points += config.pointsWin;
+        row.points += pointsForBye(config);
       }
       continue;
     }
@@ -429,12 +453,11 @@ const buildStandings = (
       row.played += 1;
       row.scoreFor += outcome.scored;
       row.scoreAgainst += outcome.conceded;
+      row.points += pointsForOutcome(outcome, config);
       if (outcome.draw) {
         row.draws += 1;
-        row.points += config.pointsDraw;
       } else if (outcome.won) {
         row.wins += 1;
-        row.points += config.pointsWin;
       } else {
         row.losses += 1;
       }
@@ -455,7 +478,7 @@ const buildStandings = (
       if (opponent === null || !tiedIds.has(opponent)) continue;
       const outcome = matchScoreFor(slot.match, playerId);
       if (!outcome) continue;
-      points += outcome.draw ? config.pointsDraw : (outcome.won ? config.pointsWin : 0);
+      points += pointsForOutcome(outcome, config);
     }
     return points;
   };

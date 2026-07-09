@@ -73,12 +73,17 @@ export interface TournamentSlot {
   matchId: number | null; // linked Match once the result is recorded
 }
 
+// 'flat': fixed points per win/draw. 'set_based' (volleyball-style): scores are
+// sets won; margin >= 2 awards 3/0, a deciding set (margin 1) awards 2/1.
+export type TournamentPointsScheme = 'flat' | 'set_based';
+
 export interface TournamentConfig {
   groupCount?: number;
   qualifiersPerGroup?: number;
   swissRounds?: number;
   pointsWin: number;
   pointsDraw: number;
+  pointsScheme?: TournamentPointsScheme;
 }
 
 export interface Tournament {

@@ -1,9 +1,11 @@
 ﻿"use client";
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Trophy, Medal, Award } from 'lucide-react';
 import { Player } from '../../types/championship';
 import { RankingMode, comparePlayersByRanking, formatRankingValue, getRankingLabel, getRankingValue } from '../../utils/ranking';
+import { useAutoRefresh } from '../../hooks/useAutoRefresh';
+import { LiveToggle, FullscreenButton, FullscreenOverlay } from '../live/LiveControls';
 
 interface RankingsTabProps {
   players: Player[];
@@ -11,9 +13,59 @@ interface RankingsTabProps {
   rankingMode: RankingMode;
   onPlayerClick?: (playerId: number) => void;
   onPlayerStatsClick?: (playerId: number) => void;
+  onRefresh?: () => void;
 }
 
-const RankingsTab: React.FC<RankingsTabProps> = ({ players, minMatchesForRanking, rankingMode, onPlayerClick, onPlayerStatsClick }) => {
+// Compact leaderboard table used by the full-screen (projector) view
+const RankingsBoard: React.FC<{
+  players: Player[];
+  rankingMode: RankingMode;
+}> = ({ players, rankingMode }) => (
+  <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800">
+    <div className="overflow-x-auto">
+      <table className="w-full text-lg">
+        <thead>
+          <tr className="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wide border-b border-gray-200 dark:border-gray-700">
+            <th className="px-4 py-3 text-left w-14">#</th>
+            <th className="px-4 py-3 text-left">Player</th>
+            <th className="px-3 py-3 text-center" title="Matches played">P</th>
+            <th className="px-3 py-3 text-center" title="Wins">W</th>
+            <th className="px-3 py-3 text-center" title="Losses">L</th>
+            <th className="px-4 py-3 text-right font-bold">{getRankingLabel(rankingMode)}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {players.map((player, index) => (
+            <tr
+              key={player.id}
+              className={`border-b border-gray-100 dark:border-gray-700/60 last:border-b-0 ${
+                index === 0 ? 'bg-amber-50 dark:bg-amber-900/15' : ''
+              }`}
+            >
+              <td className="px-4 py-3 font-bold text-gray-500 dark:text-gray-400">
+                {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+              </td>
+              <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">{player.name}</td>
+              <td className="px-3 py-3 text-center text-gray-700 dark:text-gray-300">{player.matches}</td>
+              <td className="px-3 py-3 text-center text-green-600 dark:text-green-400">{player.wins}</td>
+              <td className="px-3 py-3 text-center text-red-600 dark:text-red-400">{player.losses}</td>
+              <td className="px-4 py-3 text-right font-bold text-gray-900 dark:text-white tabular-nums">
+                {formatRankingValue(getRankingValue(player, rankingMode), rankingMode)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+);
+
+const RankingsTab: React.FC<RankingsTabProps> = ({ players, minMatchesForRanking, rankingMode, onPlayerClick, onPlayerStatsClick, onRefresh }) => {
+  const [isLive, setIsLive] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useAutoRefresh(isLive && !!onRefresh, onRefresh ?? (() => {}));
+
   // Sort players by selected ranking mode (highest first)
   const sortedPlayers = [...players]
     .filter(p => p.matches >= minMatchesForRanking)
@@ -47,10 +99,28 @@ const RankingsTab: React.FC<RankingsTabProps> = ({ players, minMatchesForRanking
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2 mb-6">
-        <Trophy className="w-6 h-6 text-yellow-500" />
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Rankings</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div className="flex items-center gap-2">
+          <Trophy className="w-6 h-6 text-yellow-500" />
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Rankings</h2>
+        </div>
+        {onRefresh && (
+          <div className="flex items-center gap-2">
+            <LiveToggle isLive={isLive} onToggle={() => setIsLive(prev => !prev)} />
+            <FullscreenButton onClick={() => setIsFullscreen(true)} />
+          </div>
+        )}
       </div>
+
+      {isFullscreen && (
+        <FullscreenOverlay
+          title="Rankings"
+          isLive={isLive}
+          onClose={() => setIsFullscreen(false)}
+        >
+          <RankingsBoard players={sortedPlayers} rankingMode={rankingMode} />
+        </FullscreenOverlay>
+      )}
 
       {sortedPlayers.length === 0 ? (
         <div className="text-center py-12">

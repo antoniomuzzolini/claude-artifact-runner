@@ -186,6 +186,31 @@ async function ensureSeasonsSchema() {
   await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS scores INTEGER[];`;
   await sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS winner_index INTEGER;`;
 
+  // Player names are unique per organization, not globally: the same name can
+  // exist in different organizations (the legacy global UNIQUE blocked that)
+  await sql`ALTER TABLE players DROP CONSTRAINT IF EXISTS players_name_key;`;
+  try {
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS players_org_name_unique
+      ON players (organization_id, LOWER(name));
+    `;
+  } catch (error) {
+    // Pre-existing duplicates within an organization would block the index;
+    // the app-level duplicate checks still apply
+    console.warn('players_org_name_unique index not created:', error);
+  }
+
+  // Self-heal: at most one current season per organization (keep the most recent)
+  await sql`
+    UPDATE seasons SET is_current = FALSE
+    WHERE is_current AND id NOT IN (
+      SELECT DISTINCT ON (organization_id) id
+      FROM seasons
+      WHERE is_current
+      ORDER BY organization_id, start_date DESC
+    );
+  `;
+
   await sql`
     CREATE TABLE IF NOT EXISTS tournaments (
       id BIGINT PRIMARY KEY,
@@ -248,13 +273,25 @@ async function ensureCurrentSeason(organizationId: number) {
 
   const now = new Date().toISOString();
   const newId = Date.now();
+  // Guarded insert: concurrent requests for a brand-new organization must not
+  // create two "Season 1" rows
   const created = await sql`
     INSERT INTO seasons (id, organization_id, name, start_date, is_current)
-    VALUES (${newId}, ${organizationId}, ${'Season 1'}, ${now}, TRUE)
+    SELECT ${newId}, ${organizationId}, ${'Season 1'}, ${now}, TRUE
+    WHERE NOT EXISTS (SELECT 1 FROM seasons WHERE organization_id = ${organizationId})
     RETURNING *
   `;
+  if (created.length > 0) {
+    return created[0];
+  }
 
-  return created[0];
+  const retry = await sql`
+    SELECT * FROM seasons
+    WHERE organization_id = ${organizationId}
+    ORDER BY start_date DESC
+    LIMIT 1
+  `;
+  return retry[0];
 }
 
 async function backfillSeasonIds(organizationId: number, seasonId: number) {
@@ -396,11 +433,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Update the current-season flag only if the id actually belongs to this
+    // organization (a stale payload from another org must not clear it)
     if (typeof effectiveSeasonId === 'number') {
       await sql`
-        UPDATE seasons
-        SET is_current = (id = ${effectiveSeasonId})
+        UPDATE seasons SET is_current = FALSE
         WHERE organization_id = ${currentUser.organizationId}
+          AND is_current
+          AND id <> ${effectiveSeasonId}
+          AND EXISTS (
+            SELECT 1 FROM seasons
+            WHERE id = ${effectiveSeasonId} AND organization_id = ${currentUser.organizationId}
+          )
+      `;
+      await sql`
+        UPDATE seasons SET is_current = TRUE
+        WHERE id = ${effectiveSeasonId} AND organization_id = ${currentUser.organizationId}
       `;
     }
 

@@ -6,6 +6,7 @@ import {
   Player,
   TournamentConfig,
   TournamentFormat,
+  TournamentPointsScheme,
   TournamentSeedingMode
 } from '../../types/championship';
 import {
@@ -46,6 +47,7 @@ const TournamentWizard: React.FC<TournamentWizardProps> = ({ players, onCreate, 
   const [groupCount, setGroupCount] = useState(2);
   const [qualifiersPerGroup, setQualifiersPerGroup] = useState(2);
   const [swissRounds, setSwissRounds] = useState(3);
+  const [pointsScheme, setPointsScheme] = useState<TournamentPointsScheme>('flat');
 
   const sortedPlayers = useMemo(
     () => [...players].sort((a, b) => a.name.localeCompare(b.name)),
@@ -108,6 +110,7 @@ const TournamentWizard: React.FC<TournamentWizardProps> = ({ players, onCreate, 
     const config: TournamentConfig = {
       pointsWin: 3,
       pointsDraw: 1,
+      ...(format !== 'single_elimination' ? { pointsScheme } : {}),
       ...(format === 'groups_knockout' ? { groupCount, qualifiersPerGroup } : {}),
       ...(format === 'swiss' ? { swissRounds } : {})
     };
@@ -316,6 +319,28 @@ const TournamentWizard: React.FC<TournamentWizardProps> = ({ players, onCreate, 
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {format !== 'single_elimination' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Points system
+              </label>
+              <select
+                value={pointsScheme}
+                onChange={(e) => setPointsScheme(e.target.value as TournamentPointsScheme)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="flat">Standard — 3 per win, 1 per draw</option>
+                <option value="set_based">Set-based (volleyball) — 3 pts, or 2/1 at the deciding set</option>
+              </select>
+              {pointsScheme === 'set_based' && (
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Enter results as sets won (e.g. 2-1, 3-0). A win by 2+ sets gives 3/0 points, a
+                  deciding-set win gives 2/1. Draws are disabled. Works for best-of-3 and best-of-5.
+                </p>
+              )}
             </div>
           )}
 

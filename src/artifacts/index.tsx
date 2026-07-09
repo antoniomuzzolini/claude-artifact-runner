@@ -50,11 +50,13 @@ const ChampionshipManager = () => {
     minMatchesForRanking,
     eloKFactor,
     rankingMode,
+    hiddenTabs,
     isLoading: isSettingsLoading,
     isSaving: isSettingsSaving,
     updateMinMatchesForRanking,
     updateEloKFactor,
-    updateRankingMode
+    updateRankingMode,
+    updateHiddenTabs
   } = useSettings();
   
   // Use the simplified cloud-only data management
@@ -309,8 +311,9 @@ const ChampionshipManager = () => {
       return;
     }
     if (slot.homePlayerId === null || slot.awayPlayerId === null) return;
-    if (slot.phase === 'knockout' && homeScore === awayScore) {
-      alert('Draws are not allowed in knockout matches.');
+    const drawsForbidden = slot.phase === 'knockout' || tournament.config.pointsScheme === 'set_based';
+    if (drawsForbidden && homeScore === awayScore) {
+      alert('Draws are not allowed in this match.');
       return;
     }
 
@@ -388,8 +391,9 @@ const ChampionshipManager = () => {
       return;
     }
     if (slot.matchId === null || slot.homePlayerId === null || slot.awayPlayerId === null) return;
-    if (slot.phase === 'knockout' && homeScore === awayScore) {
-      alert('Draws are not allowed in knockout matches.');
+    const drawsForbidden = slot.phase === 'knockout' || tournament.config.pointsScheme === 'set_based';
+    if (drawsForbidden && homeScore === awayScore) {
+      alert('Draws are not allowed in this match.');
       return;
     }
 
@@ -523,6 +527,19 @@ const ChampionshipManager = () => {
     setIsPlayerStatsModalOpen(false);
     setSelectedPlayerForStats(null);
   }, [selectedSeasonId]);
+
+  // Reset the season selection when switching organization
+  useEffect(() => {
+    setSelectedSeasonId(null);
+    setActiveTab('rankings');
+  }, [organization?.id]);
+
+  // If the active tab gets hidden from settings, fall back to rankings
+  useEffect(() => {
+    if (hiddenTabs.includes(activeTab as (typeof hiddenTabs)[number])) {
+      setActiveTab('rankings');
+    }
+  }, [hiddenTabs, activeTab]);
 
   // Handle match deletion
   const handleDeleteMatch = async (match: Match) => {
@@ -857,7 +874,7 @@ const ChampionshipManager = () => {
               { id: 'seasons', name: 'Seasons', Icon: Calendar },
               ...(user?.role === 'superuser' ? [{ id: 'players', name: 'Players', Icon: Users }] : []),
               ...(user?.role === 'superuser' ? [{ id: 'storage', name: 'Settings', Icon: Settings }] : []),
-            ].map((tab) => (
+            ].filter(tab => !hiddenTabs.includes(tab.id as (typeof hiddenTabs)[number])).map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as 'rankings' | 'new-match' | 'history' | 'tournaments' | 'seasons' | 'players' | 'storage')}
@@ -917,12 +934,13 @@ const ChampionshipManager = () => {
           {/* Tab Content */}
           <div className="p-6">
             {activeTab === 'rankings' && (
-              <RankingsTab 
-                players={selectedSeasonPlayers} 
+              <RankingsTab
+                players={selectedSeasonPlayers}
                 minMatchesForRanking={minMatchesForRanking}
                 rankingMode={rankingMode}
                 onPlayerClick={handlePlayerClick}
                 onPlayerStatsClick={handlePlayerStatsClick}
+                onRefresh={refreshData}
               />
             )}
             {activeTab === 'new-match' && (
@@ -1014,6 +1032,8 @@ const ChampionshipManager = () => {
                 onUpdateMinMatchesForRanking={updateMinMatchesForRanking}
                 onUpdateEloKFactor={updateEloKFactor}
                 onUpdateRankingMode={updateRankingMode}
+                hiddenTabs={hiddenTabs}
+                onUpdateHiddenTabs={updateHiddenTabs}
                 currentSeason={currentSeason}
                 onUpdateCurrentSeasonName={handleUpdateCurrentSeasonName}
                 isSeasonSaving={isSeasonSaving}

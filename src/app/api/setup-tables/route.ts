@@ -78,7 +78,7 @@ export async function POST() {
     await sql`
       CREATE TABLE IF NOT EXISTS players (
         id BIGINT PRIMARY KEY,
-        name VARCHAR(255) UNIQUE NOT NULL,
+        name VARCHAR(255) NOT NULL,
         organization_id INTEGER,
         created_at TIMESTAMP DEFAULT NOW()
       );

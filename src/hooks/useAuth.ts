@@ -1,19 +1,39 @@
 ﻿"use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { User, LoginCredentials, AuthResponse, getPermissions, OrganizationSetupData } from '../types/auth';
+import { User, LoginCredentials, AuthResponse, getPermissions, OrganizationSetupData, OrganizationMembership } from '../types/auth';
 import { Organization } from '../types/championship';
 
-const API_BASE = process.env.NODE_ENV === 'production' 
-  ? '' 
-  : 'http://localhost:3000';
+// API routes live on the same Next.js origin as the app, in dev too — relative
+// URLs keep working whatever port `next dev` picks
+const API_BASE = '';
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [organization, setOrganization] = useState<Organization | null>(null);
+  const [memberships, setMemberships] = useState<OrganizationMembership[]>([]);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Persist a full session (token + user + active org + memberships)
+  const applySession = useCallback((data: AuthResponse) => {
+    if (!data.token || !data.user) return;
+    localStorage.setItem('championship_token', data.token);
+    localStorage.setItem('championship_user', JSON.stringify(data.user));
+    if (data.organization) {
+      localStorage.setItem('championship_organization', JSON.stringify(data.organization));
+    } else {
+      localStorage.removeItem('championship_organization');
+    }
+    localStorage.setItem('championship_memberships', JSON.stringify(data.memberships ?? []));
+    window.dispatchEvent(new Event('auth:changed'));
+
+    setToken(data.token);
+    setUser(data.user);
+    setOrganization(data.organization || null);
+    setMemberships(data.memberships ?? []);
+  }, []);
 
   const syncAuthFromStorage = useCallback(() => {
     const storedToken = localStorage.getItem('championship_token');
@@ -29,6 +49,8 @@ export const useAuth = () => {
         } else {
           setOrganization(null);
         }
+        const storedMemberships = localStorage.getItem('championship_memberships');
+        setMemberships(storedMemberships ? JSON.parse(storedMemberships) : []);
         return;
       } catch (error) {
         console.error('Auth storage parse error:', error);
@@ -38,9 +60,11 @@ export const useAuth = () => {
     localStorage.removeItem('championship_token');
     localStorage.removeItem('championship_user');
     localStorage.removeItem('championship_organization');
+    localStorage.removeItem('championship_memberships');
     setToken(null);
     setUser(null);
     setOrganization(null);
+    setMemberships([]);
   }, []);
 
   // Initialize auth from localStorage
@@ -74,15 +98,19 @@ export const useAuth = () => {
             if (data.organization) {
               setOrganization(data.organization);
             }
+            setMemberships(data.memberships ?? []);
+            localStorage.setItem('championship_memberships', JSON.stringify(data.memberships ?? []));
             // Keep the token that was already set
           } else {
             // Token is invalid, clear everything
             localStorage.removeItem('championship_token');
             localStorage.removeItem('championship_user');
             localStorage.removeItem('championship_organization');
+            localStorage.removeItem('championship_memberships');
             setToken(null);
             setUser(null);
             setOrganization(null);
+            setMemberships([]);
           }
         } catch (error) {
           console.error('Auth initialization error:', error);
@@ -129,18 +157,7 @@ export const useAuth = () => {
       const data: AuthResponse = await response.json();
 
       if (data.success && data.user && data.token) {
-        // Store in localStorage
-        localStorage.setItem('championship_token', data.token);
-        localStorage.setItem('championship_user', JSON.stringify(data.user));
-        if (data.organization) {
-          localStorage.setItem('championship_organization', JSON.stringify(data.organization));
-        }
-        window.dispatchEvent(new Event('auth:changed'));
-        
-        // Update state
-        setToken(data.token);
-        setUser(data.user);
-        setOrganization(data.organization || null);
+        applySession(data);
         setIsLoading(false);
         return true;
       } else {
@@ -154,7 +171,7 @@ export const useAuth = () => {
       setIsLoading(false);
       return false;
     }
-  }, []);
+  }, [applySession]);
 
   const registerOrganization = useCallback(async (data: OrganizationSetupData): Promise<boolean> => {
     setIsLoading(true);
@@ -179,16 +196,7 @@ export const useAuth = () => {
       const responseData: AuthResponse = await response.json();
 
       if (responseData.success && responseData.user && responseData.token && responseData.organization) {
-        // Store in localStorage
-        localStorage.setItem('championship_token', responseData.token);
-        localStorage.setItem('championship_user', JSON.stringify(responseData.user));
-        localStorage.setItem('championship_organization', JSON.stringify(responseData.organization));
-        window.dispatchEvent(new Event('auth:changed'));
-        
-        // Update state
-        setToken(responseData.token);
-        setUser(responseData.user);
-        setOrganization(responseData.organization);
+        applySession(responseData);
         setIsLoading(false);
         return true;
       } else {
@@ -202,18 +210,84 @@ export const useAuth = () => {
       setIsLoading(false);
       return false;
     }
-  }, []);
+  }, [applySession]);
+
+  // Switch the session to another organization the user belongs to
+  const switchOrganization = useCallback(async (organizationId: number): Promise<boolean> => {
+    if (!token) return false;
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/api/auth`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'switch-organization', organizationId }),
+      });
+
+      const data: AuthResponse = await response.json();
+
+      if (data.success && data.user && data.token) {
+        applySession(data);
+        return true;
+      }
+      setError(data.error || 'Failed to switch organization');
+      return false;
+    } catch (error) {
+      console.error('Switch organization error:', error);
+      setError('Network error while switching organization');
+      return false;
+    }
+  }, [token, applySession]);
+
+  // Create an additional organization for the current user (becomes its admin)
+  const createOrganization = useCallback(async (name: string, domain?: string): Promise<boolean> => {
+    if (!token) return false;
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_BASE}/api/organizations`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'create',
+          organizationName: name,
+          organizationDomain: domain,
+        }),
+      });
+
+      const data: AuthResponse = await response.json();
+
+      if (data.success && data.user && data.token) {
+        applySession(data);
+        return true;
+      }
+      setError(data.error || 'Failed to create organization');
+      return false;
+    } catch (error) {
+      console.error('Create organization error:', error);
+      setError('Network error while creating organization');
+      return false;
+    }
+  }, [token, applySession]);
 
   const logout = useCallback(() => {
     // Clear localStorage
     localStorage.removeItem('championship_token');
     localStorage.removeItem('championship_user');
     localStorage.removeItem('championship_organization');
-    
+    localStorage.removeItem('championship_memberships');
+
     // Clear state
     setToken(null);
     setUser(null);
     setOrganization(null);
+    setMemberships([]);
     setError(null);
     window.dispatchEvent(new Event('auth:changed'));
   }, []);
@@ -248,7 +322,7 @@ export const useAuth = () => {
     }
   }, [token, logout]);
 
-  const inviteUser = useCallback(async (email: string): Promise<{ success: boolean; invitationUrl?: string }> => {
+  const inviteUser = useCallback(async (email: string): Promise<{ success: boolean; invitationUrl?: string; addedExistingUser?: boolean; message?: string }> => {
     if (!token) {
       setError('Authentication required');
       return { success: false };
@@ -270,7 +344,12 @@ export const useAuth = () => {
       const data: AuthResponse = await response.json();
 
       if (data.success) {
-        return { success: true, invitationUrl: data.invitationUrl };
+        return {
+          success: true,
+          invitationUrl: data.invitationUrl,
+          addedExistingUser: data.addedExistingUser,
+          message: data.message
+        };
       } else {
         setError(data.error || 'Failed to invite user');
         return { success: false };
@@ -390,6 +469,7 @@ export const useAuth = () => {
   return {
     user,
     organization,
+    memberships,
     token,
     isAuthenticated,
     hasOrganization,
@@ -399,6 +479,8 @@ export const useAuth = () => {
     isSuperuser,
     login,
     registerOrganization,
+    switchOrganization,
+    createOrganization,
     logout,
     refreshUser,
     inviteUser,

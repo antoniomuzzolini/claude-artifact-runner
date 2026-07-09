@@ -88,7 +88,7 @@ const SlotScoreEntry: React.FC<SlotScoreEntryProps> = ({
         )}
       </div>
       {isForbiddenDraw && (
-        <p className="mt-1 text-xs text-red-600 dark:text-red-400">Draws are not allowed in knockout matches.</p>
+        <p className="mt-1 text-xs text-red-600 dark:text-red-400">Draws are not allowed in this match.</p>
       )}
     </div>
   );

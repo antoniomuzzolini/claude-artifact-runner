@@ -2,6 +2,7 @@ import { neon } from '@neondatabase/serverless';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { NextRequest, NextResponse } from 'next/server';
+import { ensureMembershipSchema, getMemberships } from '../../../lib/organizationMembers';
 
 export const runtime = 'nodejs';
 
@@ -23,6 +24,14 @@ export function OPTIONS() {
   return new NextResponse(null, { status: 200, headers: corsHeaders });
 }
 
+function signSessionToken(userId: number, email: string, role: string, organizationId: number | null) {
+  return jwt.sign(
+    { userId, email, role, organizationId },
+    JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+}
+
 export async function GET(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization');
@@ -41,7 +50,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { action, email, password, username, token } = await req.json();
+    const { action, email, password, username, token, organizationId } = await req.json();
 
     switch (action) {
       case 'login':
@@ -50,6 +59,8 @@ export async function POST(req: NextRequest) {
         return await handleRegister(email, username, password, req);
       case 'verify':
         return await handleVerifyToken(token);
+      case 'switch-organization':
+        return await handleSwitchOrganization(organizationId, req);
       case 'invite':
         return await handleInviteUser(email, req);
       case 'complete-invitation':
@@ -93,42 +104,108 @@ async function handleLogin(email: string, password: string) {
     return jsonResponse({ error: 'Invalid email or password' }, 401);
   }
 
+  await ensureMembershipSchema();
+  const memberships = await getMemberships(user.id);
+
+  // Active organization: last used (users.organization_id) if still a member,
+  // otherwise the first membership; role comes from the membership
+  const lastUsedId = Number(user.organization_id);
+  const activeMembership = memberships.find(m => m.organization_id === lastUsedId)
+    ?? memberships[0]
+    ?? null;
+  const activeOrganizationId = activeMembership?.organization_id ?? null;
+  const activeRole = activeMembership?.role ?? user.role;
+
   let organization = null;
-  if (user.organization_id) {
+  if (activeOrganizationId) {
     const orgs = await sql`
       SELECT id, name, domain, created_at, created_by
-      FROM organizations 
-      WHERE id = ${user.organization_id}
+      FROM organizations
+      WHERE id = ${activeOrganizationId}
       LIMIT 1;
     `;
     organization = orgs[0] || null;
   }
 
   await sql`
-    UPDATE users 
-    SET last_login = NOW() 
+    UPDATE users
+    SET last_login = NOW(), organization_id = ${activeOrganizationId}
     WHERE id = ${user.id};
   `;
 
-  const token = jwt.sign(
-    { 
-      userId: user.id, 
-      email: user.email, 
-      role: user.role,
-      organizationId: user.organization_id
-    },
-    JWT_SECRET,
-    { expiresIn: '7d' }
-  );
+  const token = signSessionToken(user.id, user.email, activeRole, activeOrganizationId);
 
   const { password_hash, ...userWithoutPassword } = user;
 
   return jsonResponse({
     success: true,
-    user: userWithoutPassword,
+    user: { ...userWithoutPassword, role: activeRole, organization_id: activeOrganizationId },
     organization: organization,
+    memberships,
     token,
     message: 'Login successful'
+  });
+}
+
+// Re-issue the session token scoped to another organization the user belongs to
+async function handleSwitchOrganization(organizationId: unknown, req: NextRequest) {
+  const authHeader = req.headers.get('authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return jsonResponse({ error: 'Authentication required' }, 401);
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(authHeader.substring(7), JWT_SECRET) as any;
+  } catch (error) {
+    return jsonResponse({ error: 'Invalid token' }, 401);
+  }
+
+  const targetOrgId = Number(organizationId);
+  if (!Number.isFinite(targetOrgId)) {
+    return jsonResponse({ error: 'Invalid organization id' }, 400);
+  }
+
+  await ensureMembershipSchema();
+  const memberships = await getMemberships(decoded.userId);
+  const membership = memberships.find(m => m.organization_id === targetOrgId);
+
+  if (!membership) {
+    return jsonResponse({ error: 'You are not a member of this organization' }, 403);
+  }
+
+  const users = await sql`
+    SELECT id, email, username, role, status, created_at, last_login, organization_id
+    FROM users
+    WHERE id = ${decoded.userId}
+    LIMIT 1;
+  `;
+  if (users.length === 0 || users[0].status !== 'active') {
+    return jsonResponse({ error: 'Account not active' }, 401);
+  }
+  const user = users[0];
+
+  const orgs = await sql`
+    SELECT id, name, domain, created_at, created_by
+    FROM organizations
+    WHERE id = ${targetOrgId}
+    LIMIT 1;
+  `;
+
+  // Remember the last used organization for the next login
+  await sql`
+    UPDATE users SET organization_id = ${targetOrgId} WHERE id = ${user.id};
+  `;
+
+  const token = signSessionToken(user.id, user.email, membership.role, targetOrgId);
+
+  return jsonResponse({
+    success: true,
+    user: { ...user, role: membership.role, organization_id: targetOrgId },
+    organization: orgs[0] || null,
+    memberships,
+    token,
+    message: 'Organization switched'
   });
 }
 
@@ -180,6 +257,13 @@ async function handleRegister(
 
   const newUser = newUsers[0];
 
+  await ensureMembershipSchema();
+  await sql`
+    INSERT INTO organization_members (user_id, organization_id, role)
+    VALUES (${newUser.id}, ${currentUser.organizationId}, 'user')
+    ON CONFLICT (user_id, organization_id) DO NOTHING;
+  `;
+
   return jsonResponse({
     success: true,
     user: newUser,
@@ -210,14 +294,44 @@ async function handleInviteUser(email: string, req: NextRequest) {
     return jsonResponse({ error: 'Invalid token' }, 401);
   }
 
-  const existingUsers = await sql`
-    SELECT id FROM users 
-    WHERE email = ${email} AND organization_id = ${currentUser.organizationId}
+  await ensureMembershipSchema();
+
+  // If the email belongs to an existing account, add it to this organization
+  // directly — no invitation needed
+  const existingAccounts = await sql`
+    SELECT id, email, username, status FROM users
+    WHERE email = ${email}
     LIMIT 1;
   `;
 
-  if (existingUsers.length > 0) {
-    return jsonResponse({ error: 'User with this email already exists in your organization' }, 400);
+  if (existingAccounts.length > 0) {
+    const existingUser = existingAccounts[0];
+
+    const existingMembership = await sql`
+      SELECT user_id FROM organization_members
+      WHERE user_id = ${existingUser.id} AND organization_id = ${currentUser.organizationId}
+      LIMIT 1;
+    `;
+    if (existingMembership.length > 0) {
+      return jsonResponse({ error: 'User is already a member of your organization' }, 400);
+    }
+
+    if (existingUser.status === 'pending') {
+      return jsonResponse({ error: 'This user has a pending invitation in another organization. They must complete it first.' }, 400);
+    }
+
+    await sql`
+      INSERT INTO organization_members (user_id, organization_id, role)
+      VALUES (${existingUser.id}, ${currentUser.organizationId}, 'user')
+      ON CONFLICT (user_id, organization_id) DO NOTHING;
+    `;
+
+    return jsonResponse({
+      success: true,
+      addedExistingUser: true,
+      user: { id: existingUser.id, email: existingUser.email, username: existingUser.username },
+      message: `${existingUser.username} already had an account and was added to your organization directly.`
+    }, 201);
   }
 
   const invitationToken = jwt.sign(
@@ -251,6 +365,13 @@ async function handleInviteUser(email: string, req: NextRequest) {
     `;
 
     const newUser = newUsers[0];
+
+    await sql`
+      INSERT INTO organization_members (user_id, organization_id, role)
+      VALUES (${newUser.id}, ${currentUser.organizationId}, 'user')
+      ON CONFLICT (user_id, organization_id) DO NOTHING;
+    `;
+
     const origin = req.headers.get('origin') || req.nextUrl.origin;
 
     return jsonResponse({
@@ -408,12 +529,25 @@ async function handleVerifyToken(token: string) {
       return jsonResponse({ error: 'Account not active' }, 401);
     }
 
+    await ensureMembershipSchema();
+    const memberships = await getMemberships(user.id);
+
+    // The token's organization is the active one (it survives org switches);
+    // fall back to the user's last-used org for legacy tokens
+    const tokenOrgId = Number(decoded.organizationId);
+    const activeMembership = memberships.find(m => m.organization_id === tokenOrgId)
+      ?? memberships.find(m => m.organization_id === Number(user.organization_id))
+      ?? memberships[0]
+      ?? null;
+    const activeOrganizationId = activeMembership?.organization_id ?? null;
+    const activeRole = activeMembership?.role ?? user.role;
+
     let organization = null;
-    if (user.organization_id) {
+    if (activeOrganizationId) {
       const orgs = await sql`
         SELECT id, name, domain, created_at, created_by
-        FROM organizations 
-        WHERE id = ${user.organization_id}
+        FROM organizations
+        WHERE id = ${activeOrganizationId}
         LIMIT 1;
       `;
       organization = orgs[0] || null;
@@ -421,11 +555,12 @@ async function handleVerifyToken(token: string) {
 
     return jsonResponse({
       success: true,
-      user: user,
+      user: { ...user, role: activeRole, organization_id: activeOrganizationId },
       organization: organization,
+      memberships,
       message: 'Token is valid'
     });
-  
+
   } catch (error) {
     return jsonResponse({ error: 'Invalid or expired token' }, 401);
   }

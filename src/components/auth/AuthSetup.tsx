@@ -17,7 +17,8 @@ const AuthSetup: React.FC<AuthSetupProps> = ({ onSetupComplete }) => {
   const [setupStatus, setSetupStatus] = useState<any>(null);
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
 
-  const API_BASE = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3000';
+  // Same-origin API: relative URLs work whatever port `next dev` picks
+  const API_BASE = '';
 
   // Check setup status on mount
   useEffect(() => {

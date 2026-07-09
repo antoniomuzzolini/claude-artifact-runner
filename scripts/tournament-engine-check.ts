@@ -245,6 +245,46 @@ console.log('placeholder labels');
   ));
 }
 
+// --- set-based points (volleyball) --------------------------------------------
+console.log('set-based points scheme (volleyball)');
+{
+  const tournament = makeTournament('round_robin', [1, 2, 3], { pointsScheme: 'set_based' });
+  const matches: Match[] = [];
+  // 1 beats 2 at the deciding set (2-1): 2/1 pts. 1 sweeps 3 (2-0): 3/0.
+  // 2 sweeps 3 (2-0): 3/0. Totals: P1 = 5, P2 = 4, P3 = 0.
+  const results: Array<[number, number, number, number]> = [
+    [1, 2, 2, 1],
+    [1, 3, 2, 0],
+    [2, 3, 2, 0]
+  ];
+  for (const [home, away, sh, sa] of results) {
+    const slot = tournament.slots.find(s => {
+      const ids = [s.home, s.away].map(src => (src.kind === 'player' ? src.playerId : -1));
+      return ids.includes(home) && ids.includes(away);
+    })!;
+    const storedHome = (slot.home as { playerId: number }).playerId;
+    const match = storedHome === home ? makeMatch(home, away, sh, sa) : makeMatch(away, home, sa, sh);
+    matches.push(match);
+    slot.matchId = match.id;
+  }
+  const state = computeTournamentState(tournament, matches);
+  const pointsOf = (playerId: number) => state.standings!.find(row => row.playerId === playerId)!.points;
+  check('deciding-set win gives 2, sweep gives 3 (P1 = 5)', pointsOf(1) === 5);
+  check('deciding-set loss gives 1 (P2 = 4)', pointsOf(2) === 4);
+  check('two straight losses give 0 (P3 = 0)', pointsOf(3) === 0);
+  check('champion is P1', state.isComplete && state.championId === 1);
+
+  // best-of-5: 3-2 must also award 2/1
+  const bo5 = makeTournament('round_robin', [1, 2], { pointsScheme: 'set_based' });
+  const bo5Match = makeMatch(1, 2, 3, 2);
+  bo5.slots[0].matchId = bo5Match.id;
+  const bo5State = computeTournamentState(bo5, [bo5Match]);
+  check('best-of-5 deciding set awards 2/1', (
+    bo5State.standings!.find(row => row.playerId === 1)!.points === 2
+    && bo5State.standings!.find(row => row.playerId === 2)!.points === 1
+  ));
+}
+
 // --- string ids from Postgres BIGINT ------------------------------------------
 console.log('string match ids (as returned by the DB) still resolve');
 {

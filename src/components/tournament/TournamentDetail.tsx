@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Crown, Lock, Pencil, PlusCircle, RadioTower, Trash2, Trophy } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { ArrowLeft, Crown, Lock, Pencil, PlusCircle, Trash2, Trophy } from 'lucide-react';
 import { Match, Player, Tournament } from '../../types/championship';
 import {
   ResolvedSlot,
@@ -14,6 +14,8 @@ import {
 import BracketView from './BracketView';
 import StandingsTable from './StandingsTable';
 import SlotScoreEntry from './SlotScoreEntry';
+import { useAutoRefresh } from '../../hooks/useAutoRefresh';
+import { LiveToggle, FullscreenButton, FullscreenOverlay } from '../live/LiveControls';
 
 interface TournamentDetailProps {
   tournament: Tournament;
@@ -30,8 +32,6 @@ interface TournamentDetailProps {
 }
 
 type DetailTab = 'standings' | 'bracket' | 'scores';
-
-const AUTO_REFRESH_INTERVAL_MS = 15000;
 
 const sideName = (
   playerId: number | null,
@@ -242,6 +242,8 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
   // (they determine the qualifiers); swiss results freeze once the next round
   // is generated (they determine the pairings)
   const hasKnockoutResults = knockoutSlots.some(slot => slot.matchId !== null);
+  // Set-based scoring (volleyball) has no draws
+  const allowDraws = (tournament.config.pointsScheme ?? 'flat') !== 'set_based';
 
   const hasStandings = tournament.format !== 'single_elimination';
   const hasBracket = tournament.format === 'single_elimination' || tournament.format === 'groups_knockout';
@@ -257,16 +259,11 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
 
   const [activeTab, setActiveTab] = useState<DetailTab>(availableTabs[0].id);
   const [isAutoRefreshOn, setIsAutoRefreshOn] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // "Live" mode: keep standings/bracket up to date when results are entered
   // from other devices (e.g. tournament shown on a shared screen)
-  useEffect(() => {
-    if (!isAutoRefreshOn) return;
-    const interval = setInterval(() => {
-      onRefresh();
-    }, AUTO_REFRESH_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [isAutoRefreshOn, onRefresh]);
+  useAutoRefresh(isAutoRefreshOn, onRefresh);
 
   // Podium: KO formats use final/semifinal results, points formats use standings
   const podium = useMemo(() => {
@@ -303,6 +300,41 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
     onUpdateResult(tournament, slot, homeScore, awayScore);
   };
 
+  // Shared between the sub-tabs and the full-screen (projector) overlay
+  const standingsView = tournament.format === 'groups_knockout' ? (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {Array.from({ length: groupCount }, (_, groupIndex) => (
+        <StandingsTable
+          key={groupIndex}
+          rows={state.groupStandings[groupIndex] ?? []}
+          getPlayerName={getPlayerName}
+          qualifiedCount={tournament.config.qualifiersPerGroup ?? 0}
+          title={`Group ${groupLetter(groupIndex)}`}
+        />
+      ))}
+    </div>
+  ) : state.standings ? (
+    <div className="max-w-2xl">
+      <StandingsTable rows={state.standings} getPlayerName={getPlayerName} />
+      {tournament.format === 'swiss' && (
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          Rounds played: {state.swissRoundsGenerated}/{tournament.config.swissRounds ?? state.swissRoundsGenerated}
+        </p>
+      )}
+    </div>
+  ) : null;
+
+  const bracketView = (
+    <div>
+      {tournament.format === 'groups_knockout' && !state.isGroupPhaseComplete && (
+        <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+          The bracket fills in as group matches are completed.
+        </p>
+      )}
+      <BracketView slots={knockoutSlots} getPlayerName={getPlayerName} />
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -332,19 +364,10 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
               {getPlayerName(state.championId)}
             </span>
           )}
-          <button
-            onClick={() => setIsAutoRefreshOn(prev => !prev)}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border transition-colors duration-200 ${
-              isAutoRefreshOn
-                ? 'text-green-700 dark:text-green-300 border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20'
-                : 'text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'
-            }`}
-            title="Automatically reload results every 15 seconds"
-          >
-            <RadioTower className="w-4 h-4" />
-            {isAutoRefreshOn ? 'Live' : 'Live off'}
-            {isAutoRefreshOn && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
-          </button>
+          <LiveToggle isLive={isAutoRefreshOn} onToggle={() => setIsAutoRefreshOn(prev => !prev)} />
+          {activeTab !== 'scores' && (
+            <FullscreenButton onClick={() => setIsFullscreen(true)} />
+          )}
           {canManage && (
             <button
               onClick={() => onDelete(tournament)}
@@ -410,45 +433,22 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
         ))}
       </div>
 
-      {/* Standings / Groups tab */}
-      {activeTab === 'standings' && hasStandings && (
-        tournament.format === 'groups_knockout' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {Array.from({ length: groupCount }, (_, groupIndex) => (
-              <StandingsTable
-                key={groupIndex}
-                rows={state.groupStandings[groupIndex] ?? []}
-                getPlayerName={getPlayerName}
-                qualifiedCount={tournament.config.qualifiersPerGroup ?? 0}
-                title={`Group ${groupLetter(groupIndex)}`}
-              />
-            ))}
-          </div>
-        ) : (
-          state.standings && (
-            <div className="max-w-2xl">
-              <StandingsTable rows={state.standings} getPlayerName={getPlayerName} />
-              {tournament.format === 'swiss' && (
-                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                  Rounds played: {state.swissRoundsGenerated}/{tournament.config.swissRounds ?? state.swissRoundsGenerated}
-                </p>
-              )}
-            </div>
-          )
-        )
+      {/* Full-screen (projector) view of the standings or bracket */}
+      {isFullscreen && (
+        <FullscreenOverlay
+          title={tournament.name}
+          isLive={isAutoRefreshOn}
+          onClose={() => setIsFullscreen(false)}
+        >
+          {activeTab === 'bracket' && hasBracket ? bracketView : standingsView ?? bracketView}
+        </FullscreenOverlay>
       )}
 
+      {/* Standings / Groups tab */}
+      {activeTab === 'standings' && hasStandings && standingsView}
+
       {/* Bracket tab */}
-      {activeTab === 'bracket' && hasBracket && (
-        <div>
-          {tournament.format === 'groups_knockout' && !state.isGroupPhaseComplete && (
-            <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
-              The bracket fills in as group matches are completed.
-            </p>
-          )}
-          <BracketView slots={knockoutSlots} getPlayerName={getPlayerName} />
-        </div>
-      )}
+      {activeTab === 'bracket' && hasBracket && bracketView}
 
       {/* Scores tab */}
       {activeTab === 'scores' && (
@@ -469,7 +469,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
             <RoundsList
               slots={roundRobinSlots}
               getPlayerName={getPlayerName}
-              allowDraw
+              allowDraw={allowDraws}
               canRecordResults={canRecordResults}
               onRecordResult={handleRecord}
               onUpdateResult={handleUpdate}
@@ -486,7 +486,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
                   <RoundsList
                     slots={groupSlots.filter(slot => slot.group === groupIndex)}
                     getPlayerName={getPlayerName}
-                    allowDraw
+                    allowDraw={allowDraws}
                     canRecordResults={canRecordResults}
                     isSlotEditable={() => !hasKnockoutResults}
                     onRecordResult={handleRecord}
@@ -530,7 +530,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
               <RoundsList
                 slots={swissSlots}
                 getPlayerName={getPlayerName}
-                allowDraw
+                allowDraw={allowDraws}
                 canRecordResults={canRecordResults}
                 isSlotEditable={(slot) => slot.round === state.swissRoundsGenerated}
                 onRecordResult={handleRecord}
