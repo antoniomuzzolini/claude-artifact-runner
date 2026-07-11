@@ -457,6 +457,38 @@ export async function POST(req: NextRequest) {
         const tournamentId = Number(tournament.id);
         const tournamentSeasonId = Number(tournament.season_id);
         if (!Number.isFinite(tournamentId)) continue;
+
+        // Merge incoming slots with the stored ones instead of overwriting:
+        // a stale client (backgrounded tab, outdated snapshot) must not be able
+        // to null out match links or drop slots (e.g. swiss rounds) that were
+        // recorded from other devices. Slots are only ever added and matchIds
+        // only ever set/replaced by the app, so keeping existing non-null links
+        // and existing extra slots never discards a legitimate change.
+        let mergedSlots: Array<{ id: string; matchId?: number | null }> =
+          Array.isArray(tournament.slots) ? tournament.slots : [];
+        const existingRows = await sql`
+          SELECT slots FROM tournaments
+          WHERE id = ${tournamentId} AND organization_id = ${currentUser.organizationId}
+        `;
+        if (existingRows.length > 0 && Array.isArray(existingRows[0].slots)) {
+          const existingSlots = existingRows[0].slots as Array<{ id: string; matchId?: number | null }>;
+          const existingById = new Map(existingSlots.map(slot => [slot.id, slot]));
+          mergedSlots = mergedSlots.map(slot => {
+            const existing = existingById.get(slot.id);
+            if ((slot.matchId === null || slot.matchId === undefined)
+              && existing && existing.matchId !== null && existing.matchId !== undefined) {
+              return { ...slot, matchId: existing.matchId };
+            }
+            return slot;
+          });
+          const incomingIds = new Set(mergedSlots.map(slot => slot.id));
+          for (const existing of existingSlots) {
+            if (!incomingIds.has(existing.id)) {
+              mergedSlots.push(existing);
+            }
+          }
+        }
+
         await sql`
           INSERT INTO tournaments (id, organization_id, season_id, name, format, seeding, participant_ids, config, slots, created_by, created_at)
           VALUES (
@@ -468,7 +500,7 @@ export async function POST(req: NextRequest) {
             ${tournament.seeding},
             ${JSON.stringify(tournament.participantIds ?? [])},
             ${JSON.stringify(tournament.config ?? {})},
-            ${JSON.stringify(tournament.slots ?? [])},
+            ${JSON.stringify(mergedSlots)},
             ${tournament.createdBy || currentUser.userId},
             ${tournament.createdAt || new Date().toISOString()}
           )

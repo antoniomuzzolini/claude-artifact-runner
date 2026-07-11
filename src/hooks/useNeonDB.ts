@@ -183,6 +183,15 @@ export const useNeonDB = () => {
   // Token the in-memory data was loaded with. Guards against saving one
   // organization's state under another organization's session during a switch.
   const loadedTokenRef = useRef<string | null>(null);
+  // Exact array instances produced by the last load. Auto-save must only run
+  // when the state diverged from these (i.e. a local edit happened): echoing
+  // freshly loaded data back to the server lets a stale client (backgrounded
+  // mobile tab, live viewer polling) overwrite results recorded elsewhere.
+  const loadedSnapshotRef = useRef<{
+    players: Player[];
+    matches: Match[];
+    tournaments: Tournament[];
+  } | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
@@ -284,20 +293,29 @@ export const useNeonDB = () => {
             new Map(normalizedPlayers.map(player => [player.id, player])).values()
           );
 
+          const normalizedMatches = normalizeMatches(rawMatches, uniquePlayers, resolvedSeasonId);
+          const normalizedTournaments = normalizeTournaments(cloudData.tournaments);
+
+          loadedSnapshotRef.current = {
+            players: uniquePlayers,
+            matches: normalizedMatches,
+            tournaments: normalizedTournaments
+          };
           setPlayers(uniquePlayers);
-          setMatches(normalizeMatches(rawMatches, uniquePlayers, resolvedSeasonId));
+          setMatches(normalizedMatches);
           setSeasons(
             rawSeasons.map((season: Season) => ({
               ...season,
               id: Number(season.id)
             }))
           );
-          setTournaments(normalizeTournaments(cloudData.tournaments));
+          setTournaments(normalizedTournaments);
           setCurrentSeasonId(resolvedSeasonId);
           setLastSaved(cloudData.lastSaved ? new Date(cloudData.lastSaved) : null);
           console.log('â˜ï¸ Data loaded from Neon DB');
         } else {
           // No data in database yet - start fresh
+          loadedSnapshotRef.current = null;
           setPlayers([]);
           setMatches([]);
           setSeasons([]);
@@ -326,6 +344,7 @@ export const useNeonDB = () => {
   useEffect(() => {
     if (loadedTokenRef.current && token && loadedTokenRef.current !== token) {
       loadedTokenRef.current = null;
+      loadedSnapshotRef.current = null;
       setPlayers([]);
       setMatches([]);
       setSeasons([]);
@@ -406,15 +425,25 @@ export const useNeonDB = () => {
         new Map(normalizedPlayers.map(player => [player.id, player])).values()
       );
 
+      const normalizedMatches = normalizeMatches(rawMatches, uniquePlayers, resolvedSeasonId);
+      const normalizedTournaments = normalizeTournaments(data.tournaments);
+
+      // Import performs its own explicit POST below; register the snapshot so
+      // the auto-save effect doesn't fire a duplicate save for these setStates
+      loadedSnapshotRef.current = {
+        players: uniquePlayers,
+        matches: normalizedMatches,
+        tournaments: normalizedTournaments
+      };
       setPlayers(uniquePlayers);
-      setMatches(normalizeMatches(rawMatches, uniquePlayers, resolvedSeasonId));
+      setMatches(normalizedMatches);
       setSeasons(
         rawSeasons.map((season: Season) => ({
           ...season,
           id: Number(season.id)
         }))
       );
-      setTournaments(normalizeTournaments(data.tournaments));
+      setTournaments(normalizedTournaments);
       setCurrentSeasonId(resolvedSeasonId);
       setLastSaved(new Date());
 
@@ -605,6 +634,17 @@ export const useNeonDB = () => {
   useEffect(() => {
     if (!isAutoSaveEnabled) return;
     if (loadedTokenRef.current === null || loadedTokenRef.current !== token) return;
+    // Only save state that diverged from the last load (a real local edit).
+    // Without this, every load echoed the just-read data back to the server,
+    // and a stale client (resumed mobile tab, live viewer) could overwrite
+    // results recorded from other devices with its outdated snapshot.
+    const snapshot = loadedSnapshotRef.current;
+    if (
+      snapshot
+      && snapshot.players === players
+      && snapshot.matches === matches
+      && snapshot.tournaments === tournaments
+    ) return;
     if ((players.length > 0 || matches.length > 0 || tournaments.length > 0) && isOnline && isAuthenticated) {
       saveData();
     }

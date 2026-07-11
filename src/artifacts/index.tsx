@@ -24,6 +24,7 @@ import {
   createTournamentSlots,
   generateNextSwissRound,
   orderParticipants,
+  relinkTournamentMatches,
   slotContextLabel
 } from '../utils/tournament';
 
@@ -473,6 +474,33 @@ const ChampionshipManager = () => {
       item.id === tournament.id
         ? { ...item, slots: [...item.slots, ...newSlots] }
         : item
+    )));
+  };
+
+  // Rebuild slot→match links from the season's match history (recovery after
+  // a stale client wiped the tournament's results)
+  const handleRecoverTournamentResults = (tournament: Tournament) => {
+    const excludeMatchIds = new Set<number>();
+    tournaments.forEach(item => {
+      if (item.id === tournament.id) return;
+      item.slots.forEach(slot => {
+        if (slot.matchId !== null) excludeMatchIds.add(Number(slot.matchId));
+      });
+    });
+
+    const recoveredSlots = relinkTournamentMatches(tournament, matches, excludeMatchIds);
+    if (!recoveredSlots) {
+      alert('No results to recover: no matching matches were found in the season history.');
+      return;
+    }
+
+    const linkedBefore = tournament.slots.filter(slot => slot.matchId !== null).length;
+    const linkedAfter = recoveredSlots.filter(slot => slot.matchId !== null).length;
+    const confirmMessage = `Found ${linkedAfter - linkedBefore} result(s) in the season history that match this tournament's schedule.\n\nRelink them to the tournament?`;
+    if (!window.confirm(confirmMessage)) return;
+
+    setTournaments(prev => prev.map(item => (
+      item.id === tournament.id ? { ...item, slots: recoveredSlots } : item
     )));
   };
 
@@ -991,6 +1019,7 @@ const ChampionshipManager = () => {
                 onUpdateResult={handleUpdateTournamentResult}
                 onGenerateNextRound={handleGenerateNextSwissRound}
                 onDeleteTournament={handleDeleteTournament}
+                onRecoverResults={handleRecoverTournamentResults}
                 onRefresh={refreshData}
               />
             )}

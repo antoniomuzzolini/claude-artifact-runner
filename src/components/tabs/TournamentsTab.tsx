@@ -19,6 +19,7 @@ interface TournamentsTabProps {
   onUpdateResult: (tournament: Tournament, slot: ResolvedSlot, homeScore: number, awayScore: number) => void;
   onGenerateNextRound: (tournament: Tournament) => void;
   onDeleteTournament: (tournament: Tournament) => Promise<boolean>;
+  onRecoverResults: (tournament: Tournament) => void;
   onRefresh: () => void;
 }
 
@@ -34,6 +35,7 @@ const TournamentsTab: React.FC<TournamentsTabProps> = ({
   onUpdateResult,
   onGenerateNextRound,
   onDeleteTournament,
+  onRecoverResults,
   onRefresh
 }) => {
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -70,6 +72,7 @@ const TournamentsTab: React.FC<TournamentsTabProps> = ({
         onRecordResult={onRecordResult}
         onUpdateResult={onUpdateResult}
         onGenerateNextRound={onGenerateNextRound}
+        onRecoverResults={onRecoverResults}
         onRefresh={onRefresh}
         onDelete={async (tournament) => {
           const deleted = await onDeleteTournament(tournament);
