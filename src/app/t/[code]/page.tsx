@@ -204,15 +204,13 @@ const BracketColumns = ({
   playerNameById,
   slots,
   totalRounds,
-  thirdPlaceSlot,
-  labelFor
+  thirdPlaceSlot
 }: {
   tournament: Tournament;
   playerNameById: Map<number, string>;
   slots: ResolvedSlot[];
   totalRounds: number;
   thirdPlaceSlot?: ResolvedSlot | null;
-  labelFor?: (round: number) => string;
 }) => (
   <table className="bracket">
     <tbody>
@@ -226,7 +224,7 @@ const BracketColumns = ({
           return (
             <td key={round} className="bcol" style={{ width: `${100 / totalRounds}%` }}>
               <div className="btitle">
-                {labelFor ? labelFor(round) : knockoutRoundLabel(round, totalRounds)}
+                {knockoutRoundLabel(round, totalRounds)}
               </div>
               {roundSlots.map(slot => (
                 <MatchCard key={slot.id} tournament={tournament} playerNameById={playerNameById} slot={slot} />
@@ -408,7 +406,7 @@ export default async function PublicTournamentPage({
       `}</style>
 
       <div className="hdr">
-        {views.length > 1 && viewLabel[activeView] && (
+        {(views.length > 1 || activeView === 'consolation') && viewLabel[activeView] && (
           <span className="vtag">{viewLabel[activeView]}</span>
         )}
         <div className="title">{tournament.name}</div>
@@ -453,7 +451,6 @@ export default async function PublicTournamentPage({
           playerNameById={playerNameById}
           slots={consolationSlots}
           totalRounds={totalConsolationRounds}
-          labelFor={(round) => `Round ${round}`}
         />
       )}
 
