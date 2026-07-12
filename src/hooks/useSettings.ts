@@ -7,8 +7,8 @@ import { DEFAULT_RANKING_MODE, RankingMode, isRankingMode } from '../utils/ranki
 const DEFAULT_MIN_MATCHES = 10;
 const DEFAULT_ELO_K_FACTOR = 32;
 
-export type HideableTab = 'new-match' | 'history' | 'tournaments' | 'seasons';
-export const HIDEABLE_TABS: HideableTab[] = ['new-match', 'history', 'tournaments', 'seasons'];
+export type HideableTab = 'rankings' | 'new-match' | 'history' | 'tournaments' | 'seasons';
+export const HIDEABLE_TABS: HideableTab[] = ['rankings', 'new-match', 'history', 'tournaments', 'seasons'];
 
 const normalizeHiddenTabs = (value: unknown): HideableTab[] =>
   Array.isArray(value)

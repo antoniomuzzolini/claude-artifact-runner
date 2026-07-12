@@ -7,6 +7,7 @@ import { RankingMode, RANKING_MODE_OPTIONS } from '../../utils/ranking';
 import { HideableTab, HIDEABLE_TABS } from '../../hooks/useSettings';
 
 const HIDEABLE_TAB_LABELS: Record<HideableTab, string> = {
+  'rankings': 'Rankings',
   'new-match': 'New Match',
   'history': 'History',
   'tournaments': 'Tournaments',
@@ -92,6 +93,10 @@ const StorageTab: React.FC<StorageTabProps> = ({
     const next = hiddenTabs.includes(tab)
       ? hiddenTabs.filter(item => item !== tab)
       : [...hiddenTabs, tab];
+    if (next.length >= HIDEABLE_TABS.length) {
+      setTabsMessage('At least one tab must stay visible.');
+      return;
+    }
     setTabsMessage(null);
     const success = await onUpdateHiddenTabs(next);
     setTabsMessage(success ? 'Tab visibility saved.' : 'Failed to save tab visibility.');

@@ -618,17 +618,29 @@ const ChampionshipManager = () => {
     setSelectedPlayerForStats(null);
   }, [selectedSeasonId]);
 
-  // Reset the season selection when switching organization
+  // Reset season/tab only on a real organization SWITCH. On initial load the
+  // organization goes from undefined to its value: resetting there would wipe
+  // the view just restored from the URL (reload always landed on rankings).
+  const previousOrgIdRef = React.useRef<number | null>(null);
   useEffect(() => {
-    setSelectedSeasonId(null);
-    setActiveTab('rankings');
-  }, [organization?.id]);
-
-  // If the active tab gets hidden from settings, fall back to rankings
-  useEffect(() => {
-    if (hiddenTabs.includes(activeTab as (typeof hiddenTabs)[number])) {
+    const orgId = organization?.id ?? null;
+    if (orgId !== null && previousOrgIdRef.current !== null && previousOrgIdRef.current !== orgId) {
+      setSelectedSeasonId(null);
+      setSelectedTournamentId(null);
       setActiveTab('rankings');
     }
+    if (orgId !== null) {
+      previousOrgIdRef.current = orgId;
+    }
+  }, [organization?.id]);
+
+  // If the active tab gets hidden from settings, fall back to the first
+  // visible one (rankings itself is hideable now)
+  useEffect(() => {
+    if (!hiddenTabs.includes(activeTab as (typeof hiddenTabs)[number])) return;
+    const fallbackOrder = ['rankings', 'history', 'tournaments', 'seasons', 'new-match'] as const;
+    const fallback = fallbackOrder.find(tab => !hiddenTabs.includes(tab as (typeof hiddenTabs)[number]));
+    setActiveTab(fallback ?? 'rankings');
   }, [hiddenTabs, activeTab]);
 
   // Handle match deletion

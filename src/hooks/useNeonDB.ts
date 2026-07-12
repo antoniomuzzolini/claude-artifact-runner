@@ -638,7 +638,22 @@ export const useNeonDB = () => {
     // organizations, creating the initial season twice
     const interval = setInterval(checkConnection, 30000);
 
-    return () => clearInterval(interval);
+    // Coming back from background (mobile) or regaining network often leaves a
+    // stale "Database connection lost": re-check immediately instead of
+    // waiting for the next 30s tick, so the app reconnects on its own
+    const handleWake = () => {
+      if (document.visibilityState === 'visible') {
+        checkConnection();
+      }
+    };
+    document.addEventListener('visibilitychange', handleWake);
+    window.addEventListener('online', handleWake);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleWake);
+      window.removeEventListener('online', handleWake);
+    };
   }, [error, isAuthenticated, makeAuthenticatedRequest]);
 
   // Auto-save when data changes (only if online and authenticated). Never save
