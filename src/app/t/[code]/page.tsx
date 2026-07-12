@@ -12,16 +12,25 @@ import {
 } from '../../../utils/tournament';
 
 // Public, read-only tournament board for shared screens (TVs, projectors,
-// phones of spectators). Deliberately kept as plain server-rendered HTML with
-// inline CSS and a meta-refresh: it must work on old smart-TV browsers where
-// the main React app does not load. No authentication: access is granted by
-// knowing the unguessable share code.
+// spectators' phones). Deliberately plain server-rendered HTML with inline
+// CSS and NO client-side JavaScript: it must work on old smart-TV browsers
+// where the main React app does not load.
+//
+// One fixed screen, no scrolling (on TV-sized viewports). When the content
+// cannot reasonably fit one screen (many groups, consolation bracket), the
+// board rotates between views automatically: the meta-refresh reloads the
+// page and the server picks the view from the wall clock — zero JS.
+//
+// Optional ?view= override per screen: all | groups | bracket | consolation | rotate
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const sql = neon(process.env.DATABASE_URL!);
 
-const REFRESH_SECONDS = 20;
+const ROTATE_SECONDS = 7; // per-view time when rotating
+const STATIC_REFRESH_SECONDS = 15; // data refresh when everything fits
+
+type BoardView = 'overview' | 'groups' | 'bracket' | 'consolation' | 'table';
 
 const resolveWinnerIndex = (scores: number[], winnerIndex: unknown): number | null => {
   const parsed = Number(winnerIndex);
@@ -103,24 +112,26 @@ async function loadTournament(code: string) {
   return { tournament, matches, playerNameById };
 }
 
-const sideLabel = (
+const sideText = (
   tournament: Tournament,
   playerNameById: Map<number, string>,
   slot: ResolvedSlot,
   side: 'home' | 'away'
-): { text: string; resolved: boolean } => {
+): { text: string; resolved: boolean; isBye: boolean } => {
   const sideId = side === 'home' ? slot.homePlayerId : slot.awayPlayerId;
   const isBye = side === 'home' ? slot.homeIsBye : slot.awayIsBye;
   const placeholder = side === 'home' ? slot.homePlaceholder : slot.awayPlaceholder;
-  if (isBye) return { text: 'Bye', resolved: false };
-  if (sideId === null) return { text: placeholder ?? 'TBD', resolved: false };
+  if (isBye) return { text: 'Bye', resolved: false, isBye: true };
+  if (sideId === null) return { text: placeholder ?? 'TBD', resolved: false, isBye: false };
   return {
     text: getSideName(tournament, sideId, id => playerNameById.get(id) ?? `Player ${id}`),
-    resolved: true
+    resolved: true,
+    isBye: false
   };
 };
 
-const StandingsTableView = ({
+// Compact standings table (one group or the whole standings)
+const StandingsBox = ({
   title,
   rows,
   qualifiedCount,
@@ -131,32 +142,26 @@ const StandingsTableView = ({
   qualifiedCount: number;
   nameOf: (sideId: number) => string;
 }) => (
-  <div className="box">
-    {title && <h2>{title}</h2>}
-    <table>
+  <div className="gbox">
+    {title && <div className="gtitle">{title}</div>}
+    <table className="gt">
       <thead>
         <tr>
-          <th className="num">#</th>
+          <th className="c-pos">#</th>
           <th>Name</th>
-          <th className="num">P</th>
-          <th className="num">W</th>
-          <th className="num">D</th>
-          <th className="num">L</th>
-          <th className="num">+/-</th>
-          <th className="num">Pts</th>
+          <th className="c-n">P</th>
+          <th className="c-n">+/-</th>
+          <th className="c-n">Pts</th>
         </tr>
       </thead>
       <tbody>
         {rows.map((row, index) => (
-          <tr key={row.playerId} className={index < qualifiedCount ? 'qualified' : undefined}>
-            <td className="num">{index + 1}</td>
-            <td>{nameOf(row.playerId)}</td>
-            <td className="num">{row.played}</td>
-            <td className="num">{row.wins}</td>
-            <td className="num">{row.draws}</td>
-            <td className="num">{row.losses}</td>
-            <td className="num">{row.scoreFor - row.scoreAgainst}</td>
-            <td className="num pts">{row.points}</td>
+          <tr key={row.playerId} className={index < qualifiedCount ? 'q' : undefined}>
+            <td className="c-pos">{index + 1}</td>
+            <td className="c-name">{nameOf(row.playerId)}</td>
+            <td className="c-n">{row.played}</td>
+            <td className="c-n">{row.scoreFor - row.scoreAgainst}</td>
+            <td className="c-n pts">{row.points}</td>
           </tr>
         ))}
       </tbody>
@@ -164,7 +169,7 @@ const StandingsTableView = ({
   </div>
 );
 
-const SlotLine = ({
+const MatchCard = ({
   tournament,
   playerNameById,
   slot
@@ -173,33 +178,82 @@ const SlotLine = ({
   playerNameById: Map<number, string>;
   slot: ResolvedSlot;
 }) => {
-  const home = sideLabel(tournament, playerNameById, slot, 'home');
-  const away = sideLabel(tournament, playerNameById, slot, 'away');
+  const home = sideText(tournament, playerNameById, slot, 'home');
+  const away = sideText(tournament, playerNameById, slot, 'away');
   const homeWon = slot.winnerPlayerId !== null && slot.winnerPlayerId === slot.homePlayerId;
   const awayWon = slot.winnerPlayerId !== null && slot.winnerPlayerId === slot.awayPlayerId;
+  const done = slot.status === 'done' && slot.homeScore !== null && slot.awayScore !== null;
   return (
-    <table className="slot">
-      <tbody>
-        <tr>
-          <td className={`side right ${homeWon ? 'won' : ''} ${home.resolved ? '' : 'tbd'}`}>{home.text}</td>
-          <td className="score">
-            {slot.status === 'done' && slot.homeScore !== null && slot.awayScore !== null
-              ? `${slot.homeScore} - ${slot.awayScore}`
-              : 'vs'}
-          </td>
-          <td className={`side ${awayWon ? 'won' : ''} ${away.resolved ? '' : 'tbd'}`}>{away.text}</td>
-        </tr>
-      </tbody>
-    </table>
+    <div className="mcard">
+      <div className={`mline ${homeWon ? 'won' : ''} ${home.resolved ? '' : 'tbd'}`}>
+        <span className="msc">{done ? slot.homeScore : (slot.status === 'bye' && !home.isBye ? '·' : '')}</span>
+        <span className="mnm">{home.text}</span>
+      </div>
+      <div className={`mline ${awayWon ? 'won' : ''} ${away.resolved ? '' : 'tbd'}`}>
+        <span className="msc">{done ? slot.awayScore : (slot.status === 'bye' && !away.isBye ? '·' : '')}</span>
+        <span className="mnm">{away.text}</span>
+      </div>
+    </div>
   );
 };
 
+// Bracket as table columns: one cell per round, vertical centering gives the
+// classic pyramid without flexbox or SVG (old-TV-safe CSS)
+const BracketColumns = ({
+  tournament,
+  playerNameById,
+  slots,
+  totalRounds,
+  thirdPlaceSlot,
+  labelFor
+}: {
+  tournament: Tournament;
+  playerNameById: Map<number, string>;
+  slots: ResolvedSlot[];
+  totalRounds: number;
+  thirdPlaceSlot?: ResolvedSlot | null;
+  labelFor?: (round: number) => string;
+}) => (
+  <table className="bracket">
+    <tbody>
+      <tr>
+        {Array.from({ length: totalRounds }, (_, index) => {
+          const round = index + 1;
+          const roundSlots = slots
+            .filter(slot => slot.round === round)
+            .sort((a, b) => a.position - b.position);
+          const isFinalColumn = round === totalRounds;
+          return (
+            <td key={round} className="bcol" style={{ width: `${100 / totalRounds}%` }}>
+              <div className="btitle">
+                {labelFor ? labelFor(round) : knockoutRoundLabel(round, totalRounds)}
+              </div>
+              {roundSlots.map(slot => (
+                <MatchCard key={slot.id} tournament={tournament} playerNameById={playerNameById} slot={slot} />
+              ))}
+              {isFinalColumn && thirdPlaceSlot && thirdPlaceSlot.status !== 'bye' && (
+                <div className="third">
+                  <div className="btitle">3rd Place</div>
+                  <MatchCard tournament={tournament} playerNameById={playerNameById} slot={thirdPlaceSlot} />
+                </div>
+              )}
+            </td>
+          );
+        })}
+      </tr>
+    </tbody>
+  </table>
+);
+
 export default async function PublicTournamentPage({
-  params
+  params,
+  searchParams
 }: {
   params: Promise<{ code: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { code } = await params;
+  const query = await searchParams;
   const normalized = String(code ?? '').trim().toLowerCase();
   if (!normalized || normalized.length > 16) notFound();
 
@@ -215,139 +269,224 @@ export default async function PublicTournamentPage({
   const thirdPlaceSlot = knockoutSlots.find(slot => slot.home.kind === 'loser') ?? null;
   const mainKnockoutSlots = knockoutSlots.filter(slot => slot !== thirdPlaceSlot);
   const consolationSlots = state.slots.filter(slot => slot.phase === 'consolation');
-  const roundRobinSlots = state.slots.filter(slot => slot.phase === 'round_robin');
-  const swissSlots = state.slots.filter(slot => slot.phase === 'swiss');
-  const totalKnockoutRounds = knockoutSlots.reduce((max, slot) => Math.max(max, slot.round), 0);
+  const totalKnockoutRounds = mainKnockoutSlots.reduce((max, slot) => Math.max(max, slot.round), 0);
+  const totalConsolationRounds = consolationSlots.reduce((max, slot) => Math.max(max, slot.round), 0);
   const totalPlayable = state.playedMatches + state.pendingMatches;
   const groupCount = tournament.config.groupCount ?? 0;
+  const hasConsolation = consolationSlots.length > 0;
+  const maxGroupRows = state.groupStandings.reduce((max, rows) => Math.max(max, rows.length), 0);
 
-  const roundsOf = (slots: ResolvedSlot[]) => {
-    const byRound = new Map<number, ResolvedSlot[]>();
-    slots
-      .filter(slot => slot.status !== 'bye')
-      .forEach(slot => {
-        const bucket = byRound.get(slot.round) ?? [];
-        bucket.push(slot);
-        byRound.set(slot.round, bucket);
-      });
-    return Array.from(byRound.entries()).sort((a, b) => a[0] - b[0]);
+  // Which views exist, and does everything fit one screen?
+  let views: BoardView[];
+  if (tournament.format === 'groups_knockout') {
+    const fitsOneScreen = groupCount <= 4 && maxGroupRows <= 6 && !hasConsolation;
+    views = fitsOneScreen
+      ? ['overview']
+      : (['groups', 'bracket', ...(hasConsolation ? ['consolation'] : [])] as BoardView[]);
+  } else if (tournament.format === 'single_elimination') {
+    views = ['bracket'];
+  } else {
+    views = ['table'];
+  }
+
+  // Per-screen override: /t/<code>?view=all|groups|bracket|consolation|rotate
+  const viewParam = typeof query.view === 'string' ? query.view : undefined;
+  if (viewParam === 'all' && tournament.format === 'groups_knockout') views = ['overview'];
+  else if (viewParam === 'groups' && groupCount > 0) views = ['groups'];
+  else if (viewParam === 'bracket' && totalKnockoutRounds > 0) views = ['bracket'];
+  else if (viewParam === 'consolation' && hasConsolation) views = ['consolation'];
+  else if (viewParam === 'rotate' && tournament.format === 'groups_knockout') {
+    views = ['groups', 'bracket', ...(hasConsolation ? ['consolation'] : [])] as BoardView[];
+  }
+
+  // Rotation without JS: the page reloads on a timer and the server picks the
+  // view from the wall clock, so the board cycles by itself
+  const activeView = views.length === 1
+    ? views[0]
+    : views[Math.floor(Date.now() / 1000 / ROTATE_SECONDS) % views.length];
+  const refreshSeconds = views.length > 1 ? ROTATE_SECONDS : STATIC_REFRESH_SECONDS;
+
+  const viewLabel: Record<BoardView, string> = {
+    overview: '',
+    groups: 'Groups',
+    bracket: 'Knockout',
+    consolation: 'Consolation',
+    table: ''
   };
 
+  // Group columns per row: all in one row on the overview, larger cards
+  // (max 3 per row) on the dedicated groups view
+  const groupColumns = activeView === 'overview'
+    ? Math.max(1, groupCount)
+    : Math.max(1, Math.min(3, groupCount));
+
+  // Round robin / swiss: show the round being played next to the standings
+  const nonBracketSlots = state.slots.filter(
+    slot => slot.phase === 'round_robin' || slot.phase === 'swiss'
+  );
+  const currentRound = nonBracketSlots.some(slot => slot.status !== 'done' && slot.status !== 'bye')
+    ? Math.min(
+        ...nonBracketSlots
+          .filter(slot => slot.status !== 'done' && slot.status !== 'bye')
+          .map(slot => slot.round)
+      )
+    : nonBracketSlots.reduce((max, slot) => Math.max(max, slot.round), 0);
+  const currentRoundSlots = nonBracketSlots.filter(
+    slot => slot.round === currentRound && slot.status !== 'bye'
+  );
+
+  const scaleClass = totalKnockoutRounds >= 4 || groupCount > 4 || maxGroupRows > 6 ? 'dense' : '';
+
   return (
-    <div className="board">
+    <div className={`board view-${activeView} ${scaleClass}`}>
       {/* Works on browsers too old for the main app; reloads the whole page */}
-      <meta httpEquiv="refresh" content={String(REFRESH_SECONDS)} />
+      <meta httpEquiv="refresh" content={String(refreshSeconds)} />
       <style>{`
-        html, body { margin: 0; padding: 0; }
-        .board { min-height: 100vh; background: #111827; color: #f9fafb;
-          font-family: Arial, Helvetica, sans-serif; padding: 24px; box-sizing: border-box; }
-        .board h1 { margin: 0 0 4px 0; font-size: 32px; }
-        .board .meta { color: #9ca3af; font-size: 15px; margin-bottom: 6px; }
-        .board .champion { color: #fbbf24; font-size: 20px; font-weight: bold; margin: 10px 0; }
-        .board h2 { font-size: 18px; color: #d1d5db; border-bottom: 1px solid #374151;
-          padding-bottom: 4px; margin: 26px 0 10px 0; }
-        .board .box { margin-bottom: 8px; }
-        .board table { border-collapse: collapse; width: 100%; max-width: 640px; }
-        .board th, .board td { text-align: left; padding: 6px 10px; font-size: 16px; }
-        .board thead th { color: #9ca3af; font-size: 13px; border-bottom: 1px solid #374151; }
-        .board tbody td { border-bottom: 1px solid #1f2937; }
-        .board .num { text-align: right; width: 36px; }
-        .board .pts { font-weight: bold; }
-        .board .qualified td { color: #6ee7b7; }
-        .board table.slot { max-width: 640px; margin: 4px 0; background: #1f2937; }
-        .board table.slot td { border: none; padding: 8px 10px; }
-        .board .side { width: 45%; }
-        .board .side.right { text-align: right; }
-        .board .score { text-align: center; white-space: nowrap; font-weight: bold; width: 10%; }
-        .board .won { font-weight: bold; color: #93c5fd; }
-        .board .tbd { color: #6b7280; font-style: italic; }
-        .board .footer { color: #4b5563; font-size: 12px; margin-top: 30px; }
+        html, body { margin: 0; padding: 0; background: #0b1220; }
+        .board { position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+          background: #0b1220; color: #f9fafb; overflow: auto;
+          font-family: Arial, Helvetica, sans-serif; padding: 2vh 2vw; box-sizing: border-box; }
+        @media (min-width: 900px) { .board { overflow: hidden; } }
+
+        .hdr { width: 100%; margin-bottom: 1.6vh; }
+        .hdr .title { font-size: 3.4vh; font-weight: bold; }
+        .hdr .sub { color: #9ca3af; font-size: 1.9vh; margin-top: 0.4vh; }
+        .hdr .champ { color: #fbbf24; font-weight: bold; }
+        .hdr .vtag { float: right; color: #60a5fa; font-size: 2vh; font-weight: bold;
+          border: 1px solid #1e3a5f; padding: 0.5vh 1.2vw; border-radius: 6px; }
+
+        /* Groups: side-by-side cells (inline-block: no flexbox needed) */
+        .grow { width: 100%; font-size: 0; }
+        .gcell { display: inline-block; vertical-align: top; font-size: 1.9vh;
+          box-sizing: border-box; padding: 0 0.6vw 1.2vh 0.6vw; }
+        .gbox { background: #131c2e; border: 1px solid #1f2a3f; border-radius: 8px;
+          padding: 1vh 0.8vw; }
+        .gtitle { color: #93c5fd; font-weight: bold; font-size: 2vh; margin-bottom: 0.6vh; }
+        .gt { border-collapse: collapse; width: 100%; table-layout: fixed; }
+        .gt th, .gt td { text-align: left; padding: 0.55vh 0.4vw; font-size: 1.9vh;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .gt thead th { color: #6b7280; font-size: 1.5vh; border-bottom: 1px solid #263248; }
+        .gt tbody td { border-bottom: 1px solid #172136; }
+        .gt .c-pos { width: 9%; text-align: right; color: #6b7280; }
+        .gt .c-n { width: 13%; text-align: right; }
+        .gt .pts { font-weight: bold; }
+        .gt tr.q td { color: #6ee7b7; }
+
+        /* Bracket: table columns, vertical centering makes the pyramid.
+           The height spreads the tree over the remaining screen space
+           (on tables it behaves as a min-height). */
+        .bracket { width: 100%; border-collapse: collapse; }
+        .view-overview .bracket { height: 55vh; }
+        .view-bracket .bracket, .view-consolation .bracket { height: 78vh; }
+        .bcol { vertical-align: middle; padding: 0 0.5vw; }
+        .btitle { color: #6b7280; font-size: 1.6vh; font-weight: bold;
+          text-transform: uppercase; text-align: center; margin: 0.8vh 0; }
+        .mcard { background: #131c2e; border: 1px solid #1f2a3f; border-radius: 8px;
+          margin: 1vh 0; overflow: hidden; }
+        .mline { padding: 0.9vh 0.7vw; font-size: 2vh; border-bottom: 1px solid #1f2a3f;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mline:last-child { border-bottom: none; }
+        .mline .msc { float: right; font-weight: bold; color: #e5e7eb; padding-left: 0.6vw; }
+        .mline.won { color: #93c5fd; font-weight: bold; }
+        .mline.won .msc { color: #93c5fd; }
+        .mline.tbd { color: #6b7280; font-style: italic; }
+        .third { margin-top: 2.5vh; }
+
+        .dense .gt th, .dense .gt td { font-size: 1.6vh; padding: 0.4vh 0.4vw; }
+        .dense .mline { font-size: 1.7vh; padding: 0.7vh 0.6vw; }
+
+        .section-title { color: #d1d5db; font-size: 2.2vh; font-weight: bold; margin: 1.5vh 0 0.8vh 0; }
+        .split { width: 100%; border-collapse: collapse; }
+        .split > tbody > tr > td { vertical-align: top; padding: 0 1vw; }
+
+        .foot { position: fixed; right: 1vw; bottom: 0.6vh; color: #374151; font-size: 1.4vh; }
+        @media (max-width: 899px) {
+          .gcell { width: 100% !important; }
+          .hdr .title { font-size: 22px; }
+          .hdr .sub, .gt th, .gt td, .mline, .gtitle, .btitle { font-size: 13px; }
+        }
       `}</style>
 
-      <h1>{tournament.name}</h1>
-      <div className="meta">
-        {formatLabel(tournament.format)}
-        {' · '}{state.playedMatches}/{totalPlayable} matches played
-        {state.isComplete ? ' · Completed' : ''}
+      <div className="hdr">
+        {views.length > 1 && viewLabel[activeView] && (
+          <span className="vtag">{viewLabel[activeView]}</span>
+        )}
+        <div className="title">{tournament.name}</div>
+        <div className="sub">
+          {formatLabel(tournament.format)}
+          {' · '}{state.playedMatches}/{totalPlayable} played
+          {state.championId !== null && (
+            <span className="champ"> · 🏆 {nameOf(state.championId)}</span>
+          )}
+        </div>
       </div>
-      {state.championId !== null && (
-        <div className="champion">🏆 {nameOf(state.championId)}</div>
-      )}
 
-      {/* Group stage / standings */}
-      {tournament.format === 'groups_knockout' && state.groupStandings.map((rows, groupIndex) => (
-        <StandingsTableView
-          key={groupIndex}
-          title={`Group ${groupLetter(groupIndex)}`}
-          rows={rows}
-          qualifiedCount={tournament.config.qualifiersPerGroup ?? 0}
-          nameOf={nameOf}
-        />
-      ))}
-      {state.standings && (
-        <StandingsTableView
-          title="Standings"
-          rows={state.standings}
-          qualifiedCount={0}
-          nameOf={nameOf}
-        />
-      )}
-
-      {/* Round robin / swiss rounds */}
-      {roundsOf(tournament.format === 'round_robin' ? roundRobinSlots : swissSlots).map(([round, slots]) => (
-        <div key={`r-${round}`}>
-          <h2>Round {round}</h2>
-          {slots.map(slot => (
-            <SlotLine key={slot.id} tournament={tournament} playerNameById={playerNameById} slot={slot} />
-          ))}
-        </div>
-      ))}
-
-      {/* Knockout */}
-      {roundsOf(mainKnockoutSlots).map(([round, slots]) => (
-        <div key={`ko-${round}`}>
-          <h2>{knockoutRoundLabel(round, totalKnockoutRounds)}</h2>
-          {slots.map(slot => (
-            <SlotLine key={slot.id} tournament={tournament} playerNameById={playerNameById} slot={slot} />
-          ))}
-        </div>
-      ))}
-      {thirdPlaceSlot && thirdPlaceSlot.status !== 'bye' && (
-        <div>
-          <h2>3rd Place Match</h2>
-          <SlotLine tournament={tournament} playerNameById={playerNameById} slot={thirdPlaceSlot} />
-        </div>
-      )}
-      {consolationSlots.length > 0 && (
-        <div>
-          <h2>Consolation Bracket</h2>
-          {roundsOf(consolationSlots).map(([round, slots]) => (
-            <div key={`co-${round}`}>
-              {slots.map(slot => (
-                <SlotLine key={slot.id} tournament={tournament} playerNameById={playerNameById} slot={slot} />
-              ))}
+      {/* Overview: groups in one row on top, bracket below */}
+      {(activeView === 'overview' || activeView === 'groups') && groupCount > 0 && (
+        <div className="grow">
+          {state.groupStandings.map((rows, groupIndex) => (
+            <div key={groupIndex} className="gcell" style={{ width: `${100 / groupColumns}%` }}>
+              <StandingsBox
+                title={`Group ${groupLetter(groupIndex)}`}
+                rows={rows}
+                qualifiedCount={tournament.config.qualifiersPerGroup ?? 0}
+                nameOf={nameOf}
+              />
             </div>
           ))}
         </div>
       )}
 
-      {/* Group matches detail (kept last: standings matter most on a shared screen) */}
-      {groupCount > 0 && (
-        <div>
-          <h2>Group Matches</h2>
-          {Array.from({ length: groupCount }, (_, groupIndex) => (
-            <div key={`g-${groupIndex}`}>
-              {state.slots
-                .filter(slot => slot.phase === 'group' && slot.group === groupIndex && slot.status !== 'bye')
-                .map(slot => (
-                  <SlotLine key={slot.id} tournament={tournament} playerNameById={playerNameById} slot={slot} />
-                ))}
-            </div>
-          ))}
-        </div>
+      {(activeView === 'overview' || activeView === 'bracket') && totalKnockoutRounds > 0 && (
+        <BracketColumns
+          tournament={tournament}
+          playerNameById={playerNameById}
+          slots={mainKnockoutSlots}
+          totalRounds={totalKnockoutRounds}
+          thirdPlaceSlot={thirdPlaceSlot}
+        />
       )}
 
-      <div className="footer">Updates every {REFRESH_SECONDS} seconds</div>
+      {activeView === 'consolation' && hasConsolation && (
+        <BracketColumns
+          tournament={tournament}
+          playerNameById={playerNameById}
+          slots={consolationSlots}
+          totalRounds={totalConsolationRounds}
+          labelFor={(round) => `Round ${round}`}
+        />
+      )}
+
+      {/* Round robin / swiss: standings + the round in progress */}
+      {activeView === 'table' && (
+        <table className="split">
+          <tbody>
+            <tr>
+              <td style={{ width: '55%' }}>
+                {state.standings && (
+                  <StandingsBox title={null} rows={state.standings} qualifiedCount={0} nameOf={nameOf} />
+                )}
+              </td>
+              <td style={{ width: '45%' }}>
+                {currentRoundSlots.length > 0 && (
+                  <div>
+                    <div className="section-title">Round {currentRound}</div>
+                    {currentRoundSlots.map(slot => (
+                      <MatchCard key={slot.id} tournament={tournament} playerNameById={playerNameById} slot={slot} />
+                    ))}
+                  </div>
+                )}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+
+      <div className="foot">
+        {views.length > 1
+          ? `Rotating every ${ROTATE_SECONDS}s`
+          : `Updates every ${STATIC_REFRESH_SECONDS}s`}
+      </div>
     </div>
   );
 }
