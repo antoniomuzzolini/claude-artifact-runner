@@ -861,9 +861,9 @@ const ChampionshipManager = () => {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
       <div className="max-w-6xl mx-auto p-6">
         {/* Header */}
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <div className="flex flex-wrap items-center gap-4">
+        <div className="flex justify-between items-start gap-3 mb-8">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
                 {organization?.name || 'Championship Manager'}
               </h1>

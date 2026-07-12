@@ -196,9 +196,10 @@ const PodiumStep: React.FC<{
   colorClass: string;
   medal: string;
 }> = ({ place, names, heightClass, colorClass, medal }) => (
-  <div className="flex flex-col items-center gap-2 w-28 sm:w-36">
+  <div className="flex flex-col items-center gap-2 flex-1 min-w-0 max-w-[9rem]">
     <div className="text-2xl" aria-hidden="true">{medal}</div>
-    <div className="text-sm font-semibold text-gray-900 dark:text-white text-center leading-tight">
+    {/* w-full keeps long names inside the step column so truncate can kick in */}
+    <div className="w-full text-sm font-semibold text-gray-900 dark:text-white text-center leading-tight">
       {names.map(name => (
         <div key={name} className="truncate max-w-full">{name}</div>
       ))}
@@ -403,11 +404,11 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2 max-w-full">
           {state.isComplete && state.championId !== null && (
-            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 px-3 py-1.5 rounded-full">
-              <Crown className="w-4 h-4" />
-              {getPlayerName(state.championId)}
+            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 px-3 py-1.5 rounded-full max-w-full">
+              <Crown className="w-4 h-4 shrink-0" />
+              <span className="truncate">{getPlayerName(state.championId)}</span>
             </span>
           )}
           <LiveToggle isLive={isAutoRefreshOn} onToggle={() => setIsAutoRefreshOn(prev => !prev)} />
@@ -417,7 +418,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
           {canManage && (
             <button
               onClick={() => onDelete(tournament)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors duration-200"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm whitespace-nowrap text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors duration-200"
             >
               <Trash2 className="w-4 h-4" />
               Delete
@@ -427,7 +428,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
       </div>
 
       {podium && (
-        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-gradient-to-b from-amber-50 to-white dark:from-amber-900/20 dark:to-gray-800 p-6">
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-gradient-to-b from-amber-50 to-white dark:from-amber-900/20 dark:to-gray-800 p-4 sm:p-6">
           <div className="flex items-center justify-center gap-2 mb-5 text-amber-700 dark:text-amber-300 font-semibold">
             <Trophy className="w-5 h-5" />
             Tournament complete
