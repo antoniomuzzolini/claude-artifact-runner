@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from 'react';
-import { ArrowLeft, Crown, Lock, Pencil, PlusCircle, Trash2, Trophy } from 'lucide-react';
+import { ArrowLeft, Copy, Crown, Link2, Lock, Pencil, PlusCircle, Trash2, Trophy } from 'lucide-react';
 import { Match, Player, Tournament } from '../../types/championship';
 import {
   ResolvedSlot,
@@ -30,6 +30,7 @@ interface TournamentDetailProps {
   onDelete: (tournament: Tournament) => void;
   onAddThirdPlaceMatch: (tournament: Tournament) => void;
   onAddConsolationBracket: (tournament: Tournament) => void;
+  onGenerateShareLink: (tournament: Tournament) => Promise<string | null>;
   onRefresh: () => void;
   onBack: () => void;
 }
@@ -217,6 +218,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
   onDelete,
   onAddThirdPlaceMatch,
   onAddConsolationBracket,
+  onGenerateShareLink,
   onRefresh,
   onBack
 }) => {
@@ -276,6 +278,34 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
   const [activeTab, setActiveTab] = useState<DetailTab>(availableTabs[0].id);
   const [isAutoRefreshOn, setIsAutoRefreshOn] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isShareLoading, setIsShareLoading] = useState(false);
+  const [isLinkCopied, setIsLinkCopied] = useState(false);
+
+  const shareUrl = tournament.shareCode
+    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/t/${tournament.shareCode}`
+    : null;
+
+  const handleShareClick = async () => {
+    if (!tournament.shareCode) {
+      setIsShareLoading(true);
+      const code = await onGenerateShareLink(tournament);
+      setIsShareLoading(false);
+      if (!code) return;
+    }
+    setIsShareOpen(true);
+  };
+
+  const handleCopyLink = async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setIsLinkCopied(true);
+      setTimeout(() => setIsLinkCopied(false), 2000);
+    } catch {
+      window.prompt('Copy the public link:', shareUrl);
+    }
+  };
 
   // "Live" mode: keep standings/bracket up to date when results are entered
   // from other devices (e.g. tournament shown on a shared screen)
@@ -415,6 +445,17 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
           )}
           {canManage && (
             <button
+              onClick={handleShareClick}
+              disabled={isShareLoading}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm whitespace-nowrap text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-200 disabled:opacity-50"
+              title="Public read-only board, works on any device without login"
+            >
+              <Link2 className="w-4 h-4" />
+              {isShareLoading ? 'Creating…' : 'Public link'}
+            </button>
+          )}
+          {canManage && (
+            <button
               onClick={() => onDelete(tournament)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm whitespace-nowrap text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors duration-200"
             >
@@ -424,6 +465,34 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
           )}
         </div>
       </div>
+
+      {isShareOpen && shareUrl && (
+        <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-900/20 p-4">
+          <div className="text-sm font-semibold text-gray-900 dark:text-white mb-1">Public board link</div>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+            Read-only, no login needed, auto-updates — made for TVs and shared screens.
+            Anyone with the link can see this tournament&apos;s names and scores.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <code className="px-3 py-1.5 text-sm rounded-md bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white break-all">
+              {shareUrl}
+            </code>
+            <button
+              onClick={handleCopyLink}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm whitespace-nowrap bg-blue-600 dark:bg-blue-500 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors duration-200"
+            >
+              <Copy className="w-4 h-4" />
+              {isLinkCopied ? 'Copied!' : 'Copy'}
+            </button>
+            <button
+              onClick={() => setIsShareOpen(false)}
+              className="px-3 py-1.5 text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors duration-200"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {podium && (
         <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-gradient-to-b from-amber-50 to-white dark:from-amber-900/20 dark:to-gray-800 p-4 sm:p-6">

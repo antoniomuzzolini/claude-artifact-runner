@@ -114,6 +114,7 @@ export interface Tournament {
   season_id: number;
   createdBy?: number;
   createdAt: string;
+  shareCode?: string | null; // public board code for /t/<code> (opt-in)
 }
 
 export interface AppData {

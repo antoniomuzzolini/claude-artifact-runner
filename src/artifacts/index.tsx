@@ -566,6 +566,29 @@ const ChampionshipManager = () => {
     )));
   };
 
+  // Create (or fetch) the tournament's public board code for /t/<code>
+  const handleGenerateShareLink = async (tournament: Tournament): Promise<string | null> => {
+    try {
+      const response = await makeAuthenticatedRequest('/api/tournaments', {
+        method: 'POST',
+        body: JSON.stringify({ tournamentId: tournament.id })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.shareCode) {
+        alert(data.error || 'Failed to create the public link.');
+        return null;
+      }
+      setTournaments(prev => prev.map(item => (
+        item.id === tournament.id ? { ...item, shareCode: data.shareCode } : item
+      )));
+      return data.shareCode;
+    } catch (error) {
+      console.error('Share link error:', error);
+      alert('Failed to create the public link.');
+      return null;
+    }
+  };
+
   const handleDeleteTournament = async (tournament: Tournament) => {
     const confirmMessage = `Are you sure you want to delete the tournament "${tournament.name}"?\n\nMatches already played will remain in the season history.`;
     if (!window.confirm(confirmMessage)) {
@@ -1100,6 +1123,7 @@ const ChampionshipManager = () => {
                 onDeleteTournament={handleDeleteTournament}
                 onAddThirdPlaceMatch={handleAddThirdPlaceMatch}
                 onAddConsolationBracket={handleAddConsolationBracket}
+                onGenerateShareLink={handleGenerateShareLink}
                 onRefresh={refreshData}
               />
             )}

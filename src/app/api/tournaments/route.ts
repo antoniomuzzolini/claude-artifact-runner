@@ -10,7 +10,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-fallback-secret-key-change-in
 const corsHeaders = {
   'Access-Control-Allow-Credentials': 'true',
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'DELETE,OPTIONS',
+  'Access-Control-Allow-Methods': 'POST,DELETE,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
@@ -37,6 +37,74 @@ function getCurrentUser(req: NextRequest) {
     return { currentUser };
   } catch (error) {
     return { error: jsonResponse({ error: 'Invalid token' }, 401) };
+  }
+}
+
+// Short public share codes: no ambiguous characters (0/O, 1/l/I) since they
+// may be typed by hand on a TV remote
+const SHARE_CODE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
+const generateShareCode = () =>
+  Array.from({ length: 6 }, () =>
+    SHARE_CODE_ALPHABET[Math.floor(Math.random() * SHARE_CODE_ALPHABET.length)]
+  ).join('');
+
+// Create (or return) the tournament's public share code for /t/<code>
+export async function POST(req: NextRequest) {
+  try {
+    const { currentUser, error } = getCurrentUser(req);
+    if (error) return error;
+    if (currentUser.role !== 'superuser') {
+      return jsonResponse({ error: 'Only administrators can create public links' }, 403);
+    }
+
+    const { tournamentId } = await req.json().catch(() => ({}));
+    const parsedId = Number(tournamentId);
+    if (!Number.isFinite(parsedId)) {
+      return jsonResponse({ error: 'Invalid tournament id' }, 400);
+    }
+
+    await sql`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS share_code VARCHAR(16);`;
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS tournaments_share_code_unique ON tournaments (share_code);`;
+
+    const rows = await sql`
+      SELECT share_code FROM tournaments
+      WHERE id = ${parsedId} AND organization_id = ${currentUser.organizationId}
+      LIMIT 1
+    `;
+    if (rows.length === 0) {
+      return jsonResponse({ error: 'Tournament not found' }, 404);
+    }
+    if (rows[0].share_code) {
+      return jsonResponse({ shareCode: rows[0].share_code });
+    }
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const code = generateShareCode();
+      try {
+        const updated = await sql`
+          UPDATE tournaments SET share_code = ${code}
+          WHERE id = ${parsedId} AND organization_id = ${currentUser.organizationId}
+            AND share_code IS NULL
+          RETURNING share_code
+        `;
+        if (updated.length > 0) {
+          return jsonResponse({ shareCode: updated[0].share_code });
+        }
+        // Another request set it concurrently: return the stored one
+        const existing = await sql`
+          SELECT share_code FROM tournaments
+          WHERE id = ${parsedId} AND organization_id = ${currentUser.organizationId}
+          LIMIT 1
+        `;
+        return jsonResponse({ shareCode: existing[0]?.share_code ?? null });
+      } catch {
+        // Unique-index collision with another tournament's code: retry
+      }
+    }
+    return jsonResponse({ error: 'Could not generate a link, please retry' }, 500);
+  } catch (error) {
+    console.error('Tournament share error:', error);
+    return jsonResponse({ error: 'Database operation failed' }, 500);
   }
 }
 

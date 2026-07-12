@@ -239,6 +239,7 @@ const transformTournamentRow = (row: Record<string, any>) => ({
   config: row.config ?? {},
   teams: Array.isArray(row.teams) ? row.teams : [],
   slots: Array.isArray(row.slots) ? row.slots : [],
+  shareCode: row.share_code ?? null,
   organization_id: row.organization_id,
   season_id: Number(row.season_id),
   createdBy: row.created_by ?? undefined,
