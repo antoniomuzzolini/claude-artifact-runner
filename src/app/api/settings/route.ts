@@ -10,8 +10,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-fallback-secret-key-change-in
 const DEFAULT_MIN_MATCHES = 10;
 const DEFAULT_ELO_K_FACTOR = 32;
 
-// Tabs an organization can hide from the navigation
-const HIDEABLE_TABS = ['new-match', 'history', 'tournaments', 'seasons'] as const;
+// Tabs an organization can hide from the navigation (must match the client
+// list in src/hooks/useSettings.ts)
+const HIDEABLE_TABS = ['rankings', 'new-match', 'history', 'tournaments', 'seasons'] as const;
 
 const normalizeHiddenTabs = (value: unknown): string[] | null => {
   if (!Array.isArray(value)) return null;
