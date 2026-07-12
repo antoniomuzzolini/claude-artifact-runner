@@ -164,6 +164,19 @@ const normalizeTournaments = (raw: unknown): Tournament[] => {
         participantIds: Array.isArray(tournament.participantIds)
           ? tournament.participantIds.map(Number).filter(Number.isFinite)
           : [],
+        ...(Array.isArray(tournament.teams) && tournament.teams.length > 0
+          ? {
+              teams: tournament.teams
+                .map(team => ({
+                  ...team,
+                  id: Number(team.id),
+                  playerIds: Array.isArray(team.playerIds)
+                    ? team.playerIds.map(Number).filter(Number.isFinite)
+                    : []
+                }))
+                .filter(team => Number.isFinite(team.id))
+            }
+          : {}),
         slots: Array.isArray(tournament.slots)
           ? tournament.slots.map(slot => ({
               ...slot,

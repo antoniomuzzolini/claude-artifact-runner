@@ -226,6 +226,8 @@ async function ensureSeasonsSchema() {
       created_at TIMESTAMP DEFAULT NOW()
     );
   `;
+  // Tournament-scoped teams (team tournaments); empty for individual ones
+  await sql`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS teams JSONB;`;
 }
 
 const transformTournamentRow = (row: Record<string, any>) => ({
@@ -235,6 +237,7 @@ const transformTournamentRow = (row: Record<string, any>) => ({
   seeding: row.seeding,
   participantIds: Array.isArray(row.participant_ids) ? row.participant_ids.map(Number) : [],
   config: row.config ?? {},
+  teams: Array.isArray(row.teams) ? row.teams : [],
   slots: Array.isArray(row.slots) ? row.slots : [],
   organization_id: row.organization_id,
   season_id: Number(row.season_id),
@@ -466,10 +469,19 @@ export async function POST(req: NextRequest) {
         // and existing extra slots never discards a legitimate change.
         let mergedSlots: Array<{ id: string; matchId?: number | null }> =
           Array.isArray(tournament.slots) ? tournament.slots : [];
+        let mergedTeams: unknown[] = Array.isArray(tournament.teams) ? tournament.teams : [];
         const existingRows = await sql`
-          SELECT slots FROM tournaments
+          SELECT slots, teams FROM tournaments
           WHERE id = ${tournamentId} AND organization_id = ${currentUser.organizationId}
         `;
+        // Same staleness guard as for slots: a payload without teams (old
+        // client build, outdated snapshot) must not wipe stored teams
+        if (existingRows.length > 0
+          && mergedTeams.length === 0
+          && Array.isArray(existingRows[0].teams)
+          && existingRows[0].teams.length > 0) {
+          mergedTeams = existingRows[0].teams;
+        }
         if (existingRows.length > 0 && Array.isArray(existingRows[0].slots)) {
           const existingSlots = existingRows[0].slots as Array<{ id: string; matchId?: number | null }>;
           const existingById = new Map(existingSlots.map(slot => [slot.id, slot]));
@@ -490,7 +502,7 @@ export async function POST(req: NextRequest) {
         }
 
         await sql`
-          INSERT INTO tournaments (id, organization_id, season_id, name, format, seeding, participant_ids, config, slots, created_by, created_at)
+          INSERT INTO tournaments (id, organization_id, season_id, name, format, seeding, participant_ids, config, teams, slots, created_by, created_at)
           VALUES (
             ${tournamentId},
             ${currentUser.organizationId},
@@ -500,6 +512,7 @@ export async function POST(req: NextRequest) {
             ${tournament.seeding},
             ${JSON.stringify(tournament.participantIds ?? [])},
             ${JSON.stringify(tournament.config ?? {})},
+            ${JSON.stringify(mergedTeams)},
             ${JSON.stringify(mergedSlots)},
             ${tournament.createdBy || currentUser.userId},
             ${tournament.createdAt || new Date().toISOString()}
@@ -510,6 +523,7 @@ export async function POST(req: NextRequest) {
             seeding = EXCLUDED.seeding,
             participant_ids = EXCLUDED.participant_ids,
             config = EXCLUDED.config,
+            teams = EXCLUDED.teams,
             slots = EXCLUDED.slots,
             season_id = EXCLUDED.season_id
           WHERE tournaments.organization_id = ${currentUser.organizationId}

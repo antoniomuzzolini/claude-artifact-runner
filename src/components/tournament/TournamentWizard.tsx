@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowUp, Check, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, Check, Scale, Shuffle, X } from 'lucide-react';
 import {
   Player,
   TournamentConfig,
@@ -11,6 +11,8 @@ import {
 } from '../../types/championship';
 import {
   FormatSuggestion,
+  buildBalancedTeamGroups,
+  buildRandomTeamGroups,
   formatLabel,
   splitGroupSizes,
   suggestFormats
@@ -22,10 +24,13 @@ export interface TournamentDraft {
   seeding: TournamentSeedingMode;
   participantIds: number[];
   config: TournamentConfig;
+  // Team tournaments: composed teams in seed order (ids assigned on create)
+  teams?: { name: string; playerIds: number[] }[];
 }
 
 interface TournamentWizardProps {
   players: Player[];
+  suggestedTeamSize: number; // average team size of the org's matches so far
   onCreate: (draft: TournamentDraft) => void;
   onCancel: () => void;
 }
@@ -37,7 +42,7 @@ const FORMAT_DESCRIPTIONS: Record<TournamentFormat, string> = {
   swiss: 'Fixed number of rounds, opponents paired by score. Nobody is eliminated.'
 };
 
-const TournamentWizard: React.FC<TournamentWizardProps> = ({ players, onCreate, onCancel }) => {
+const TournamentWizard: React.FC<TournamentWizardProps> = ({ players, suggestedTeamSize, onCreate, onCancel }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [name, setName] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -50,13 +55,58 @@ const TournamentWizard: React.FC<TournamentWizardProps> = ({ players, onCreate, 
   const [pointsScheme, setPointsScheme] = useState<TournamentPointsScheme>('flat');
   const [thirdPlaceMatch, setThirdPlaceMatch] = useState(false);
   const [consolationBracket, setConsolationBracket] = useState(false);
+  const [teamSize, setTeamSize] = useState(Math.max(1, suggestedTeamSize));
+  // Teams as arrays of player ids, in seed order; names editable alongside
+  const [teamGroups, setTeamGroups] = useState<number[][]>([]);
+  const [teamNames, setTeamNames] = useState<string[]>([]);
 
   const sortedPlayers = useMemo(
     () => [...players].sort((a, b) => a.name.localeCompare(b.name)),
     [players]
   );
   const participantCount = selectedIds.size;
-  const suggestions = useMemo(() => suggestFormats(participantCount), [participantCount]);
+  const isTeamMode = teamSize > 1;
+  // Competitors in the chosen format: teams (minimum size -> extras become
+  // reserves of the weakest teams) or individual players
+  const sideCount = isTeamMode ? Math.floor(participantCount / teamSize) : participantCount;
+  const suggestions = useMemo(() => suggestFormats(sideCount), [sideCount]);
+
+  const playerById = useMemo(() => new Map(players.map(player => [player.id, player])), [players]);
+  const eloOf = (playerId: number) => playerById.get(playerId)?.elo ?? 1200;
+  const teamAvgElo = (team: number[]) => (
+    team.length === 0 ? 0 : Math.round(team.reduce((sum, id) => sum + eloOf(id), 0) / team.length)
+  );
+
+  const regenerateTeams = (mode: 'random' | 'balanced', ids?: number[]) => {
+    const pool = ids ?? Array.from(selectedIds);
+    const groups = mode === 'random'
+      ? buildRandomTeamGroups(pool, teamSize, eloOf)
+      : buildBalancedTeamGroups(pool, teamSize, eloOf);
+    setTeamGroups(groups);
+    setTeamNames(prev => groups.map((_, index) => prev[index] ?? `Team ${String.fromCharCode(65 + index)}`));
+  };
+
+  const movePlayerToTeam = (playerId: number, targetTeamIndex: number) => {
+    setTeamGroups(prev => prev.map((team, index) => {
+      const without = team.filter(id => id !== playerId);
+      return index === targetTeamIndex ? [...without, playerId] : without;
+    }));
+  };
+
+  const moveTeam = (index: number, delta: number) => {
+    const target = index + delta;
+    if (target < 0 || target >= teamGroups.length) return;
+    setTeamGroups(prev => {
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+    setTeamNames(prev => {
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  };
 
   const togglePlayer = (playerId: number) => {
     setSelectedIds(prev => {
@@ -76,6 +126,10 @@ const TournamentWizard: React.FC<TournamentWizardProps> = ({ players, onCreate, 
     if (suggestion.defaultConfig.qualifiersPerGroup) setQualifiersPerGroup(suggestion.defaultConfig.qualifiersPerGroup);
     if (suggestion.defaultConfig.swissRounds) setSwissRounds(suggestion.defaultConfig.swissRounds);
     setManualOrder(Array.from(selectedIds));
+    if (isTeamMode) {
+      // Fresh composition on entering the options step (balanced by default)
+      regenerateTeams('balanced');
+    }
     setStep(3);
   };
 
@@ -90,16 +144,16 @@ const TournamentWizard: React.FC<TournamentWizardProps> = ({ players, onCreate, 
   };
 
   const groupCountOptions = useMemo(() => {
-    const max = Math.floor(participantCount / 3);
+    const max = Math.floor(sideCount / 3);
     return Array.from({ length: Math.max(0, max - 1) }, (_, i) => i + 2);
-  }, [participantCount]);
+  }, [sideCount]);
 
   const qualifierOptions = useMemo(() => {
-    const sizes = splitGroupSizes(participantCount, groupCount);
+    const sizes = splitGroupSizes(sideCount, groupCount);
     const max = sizes.length > 0 ? Math.min(...sizes) : 1;
     return Array.from({ length: max }, (_, i) => i + 1)
       .filter(count => count * groupCount >= 2);
-  }, [participantCount, groupCount]);
+  }, [sideCount, groupCount]);
 
   const nameById = useMemo(
     () => new Map(players.map(player => [player.id, player.name])),
@@ -108,18 +162,21 @@ const TournamentWizard: React.FC<TournamentWizardProps> = ({ players, onCreate, 
 
   // A 3rd place match needs semifinals: at least 3 bracket entrants
   const knockoutEntrants = format === 'single_elimination'
-    ? participantCount
+    ? sideCount
     : (format === 'groups_knockout' ? groupCount * qualifiersPerGroup : 0);
   const canHaveThirdPlace = knockoutEntrants >= 3;
-  // A consolation bracket needs at least 2 non-qualified players
+  // A consolation bracket needs at least 2 non-qualified sides
   const nonQualifiedCount = format === 'groups_knockout'
-    ? participantCount - groupCount * qualifiersPerGroup
+    ? sideCount - groupCount * qualifiersPerGroup
     : 0;
   const canHaveConsolation = nonQualifiedCount >= 2;
 
+  const teamsValid = !isTeamMode
+    || (teamGroups.length >= 2 && teamGroups.every(team => team.length > 0));
+
   const handleCreate = () => {
-    if (!format || participantCount < 2) return;
-    const participantIds = seeding === 'manual' ? manualOrder : Array.from(selectedIds);
+    if (!format || participantCount < 2 || !teamsValid) return;
+    const participantIds = !isTeamMode && seeding === 'manual' ? manualOrder : Array.from(selectedIds);
     const config: TournamentConfig = {
       pointsWin: 3,
       pointsDraw: 1,
@@ -127,14 +184,24 @@ const TournamentWizard: React.FC<TournamentWizardProps> = ({ players, onCreate, 
       ...(format === 'groups_knockout' ? { groupCount, qualifiersPerGroup } : {}),
       ...(format === 'swiss' ? { swissRounds } : {}),
       ...(canHaveThirdPlace && thirdPlaceMatch ? { thirdPlaceMatch: true } : {}),
-      ...(canHaveConsolation && consolationBracket ? { consolationBracket: true } : {})
+      ...(canHaveConsolation && consolationBracket ? { consolationBracket: true } : {}),
+      ...(isTeamMode ? { teamSize } : {})
     };
     onCreate({
       name: name.trim() || 'Tournament',
       format,
-      seeding,
+      // Team tournaments: the team list order IS the seed order
+      seeding: isTeamMode ? 'manual' : seeding,
       participantIds,
-      config
+      config,
+      ...(isTeamMode
+        ? {
+            teams: teamGroups.map((playerIds, index) => ({
+              name: teamNames[index] ?? `Team ${String.fromCharCode(65 + index)}`,
+              playerIds
+            }))
+          }
+        : {})
     });
   };
 
@@ -214,9 +281,31 @@ const TournamentWizard: React.FC<TournamentWizardProps> = ({ players, onCreate, 
               ))}
             </div>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Players per team
+            </label>
+            <select
+              value={teamSize}
+              onChange={(e) => setTeamSize(Number(e.target.value))}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value={1}>1 — individual</option>
+              {Array.from({ length: Math.max(0, Math.floor(Math.max(participantCount, 4) / 2) - 1) }, (_, i) => i + 2).map(size => (
+                <option key={size} value={size}>{size} per team</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Minimum size: leftover players join the weakest teams as reserves.
+              {isTeamMode && participantCount > 0 && (
+                <> With {participantCount} players: {sideCount} teams
+                {participantCount % teamSize > 0 && <>, {participantCount % teamSize} reserve(s)</>}.</>
+              )}
+            </p>
+          </div>
           <button
             onClick={() => setStep(2)}
-            disabled={participantCount < 2}
+            disabled={participantCount < 2 || sideCount < 2}
             className="px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Choose format
@@ -227,7 +316,7 @@ const TournamentWizard: React.FC<TournamentWizardProps> = ({ players, onCreate, 
       {step === 2 && (
         <div className="space-y-4">
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            With <strong>{participantCount} players</strong>, here is how each format would look:
+            With <strong>{isTeamMode ? `${sideCount} teams (${participantCount} players)` : `${participantCount} players`}</strong>, here is how each format would look:
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {suggestions.map(suggestion => (
@@ -280,25 +369,121 @@ const TournamentWizard: React.FC<TournamentWizardProps> = ({ players, onCreate, 
       {step === 3 && format && (
         <div className="space-y-5">
           <div className="text-sm text-gray-600 dark:text-gray-400">
-            <strong className="text-gray-900 dark:text-white">{formatLabel(format)}</strong> with {participantCount} players
+            <strong className="text-gray-900 dark:text-white">{formatLabel(format)}</strong> with {isTeamMode ? `${sideCount} teams` : `${participantCount} players`}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Seeding
-            </label>
-            <select
-              value={seeding}
-              onChange={(e) => setSeeding(e.target.value as TournamentSeedingMode)}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="random">Random draw</option>
-              <option value="elo">Seeded by ELO</option>
-              <option value="manual">Manual order</option>
-            </select>
-          </div>
+          {isTeamMode && (
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Teams (list order = seed order)
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => regenerateTeams('balanced')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm whitespace-nowrap text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-200"
+                    title="Snake draft over ELO: strongest and weakest players spread evenly"
+                  >
+                    <Scale className="w-4 h-4" />
+                    Balance by ELO
+                  </button>
+                  <button
+                    onClick={() => regenerateTeams('random')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm whitespace-nowrap text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-200"
+                    title="Random teams; leftover players still go to the weakest teams"
+                  >
+                    <Shuffle className="w-4 h-4" />
+                    Random draw
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {teamGroups.map((team, teamIndex) => (
+                  <div
+                    key={teamIndex}
+                    className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 space-y-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">#{teamIndex + 1}</span>
+                      <input
+                        type="text"
+                        value={teamNames[teamIndex] ?? ''}
+                        onChange={(e) => setTeamNames(prev => prev.map((item, index) => (index === teamIndex ? e.target.value : item)))}
+                        className="min-w-0 flex-1 px-2 py-1 text-sm font-semibold border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap shrink-0">
+                        ~{teamAvgElo(team)} ELO
+                      </span>
+                      <span className="flex shrink-0">
+                        <button
+                          onClick={() => moveTeam(teamIndex, -1)}
+                          disabled={teamIndex === 0}
+                          className="p-1 rounded text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30"
+                          aria-label="Move team up"
+                        >
+                          <ArrowUp className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => moveTeam(teamIndex, 1)}
+                          disabled={teamIndex === teamGroups.length - 1}
+                          className="p-1 rounded text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30"
+                          aria-label="Move team down"
+                        >
+                          <ArrowDown className="w-4 h-4" />
+                        </button>
+                      </span>
+                    </div>
+                    <div className="space-y-1">
+                      {team.map((playerId, memberIndex) => (
+                        <div key={playerId} className="flex items-center justify-between gap-2 text-sm">
+                          <span className="truncate text-gray-700 dark:text-gray-300">
+                            {nameById.get(playerId) ?? playerId}
+                            {memberIndex >= teamSize && (
+                              <span className="ml-1.5 text-xs text-amber-600 dark:text-amber-400">reserve</span>
+                            )}
+                          </span>
+                          <select
+                            value={teamIndex}
+                            onChange={(e) => movePlayerToTeam(playerId, Number(e.target.value))}
+                            className="px-1.5 py-0.5 text-xs border border-gray-200 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            aria-label={`Team for ${nameById.get(playerId) ?? playerId}`}
+                          >
+                            {teamGroups.map((_, optionIndex) => (
+                              <option key={optionIndex} value={optionIndex}>
+                                {teamNames[optionIndex] || `Team ${optionIndex + 1}`}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
+                      {team.length === 0 && (
+                        <p className="text-xs text-red-600 dark:text-red-400">Empty team — move a player here or regenerate.</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-          {seeding === 'manual' && (
+          {!isTeamMode && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Seeding
+              </label>
+              <select
+                value={seeding}
+                onChange={(e) => setSeeding(e.target.value as TournamentSeedingMode)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="random">Random draw</option>
+                <option value="elo">Seeded by ELO</option>
+                <option value="manual">Manual order</option>
+              </select>
+            </div>
+          )}
+
+          {!isTeamMode && seeding === 'manual' && (
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Seed order (1 = top seed)
@@ -444,7 +629,7 @@ const TournamentWizard: React.FC<TournamentWizardProps> = ({ players, onCreate, 
                 onChange={(e) => setSwissRounds(Number(e.target.value))}
                 className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {Array.from({ length: Math.max(1, Math.min(10, participantCount - 1) - 2) }, (_, i) => i + 3).map(count => (
+                {Array.from({ length: Math.max(1, Math.min(10, sideCount - 1) - 2) }, (_, i) => i + 3).map(count => (
                   <option key={count} value={count}>{count} rounds</option>
                 ))}
               </select>
@@ -453,7 +638,8 @@ const TournamentWizard: React.FC<TournamentWizardProps> = ({ players, onCreate, 
 
           <button
             onClick={handleCreate}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors duration-200"
+            disabled={!teamsValid}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Check className="w-4 h-4" />
             Create tournament

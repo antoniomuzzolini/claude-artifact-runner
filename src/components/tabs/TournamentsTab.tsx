@@ -13,6 +13,7 @@ interface TournamentsTabProps {
   matches: Match[];
   selectedTournamentId: number | null; // lifted so the URL can deep-link it
   onSelectTournament: (tournamentId: number | null) => void;
+  suggestedTeamSize: number;
   canCreate: boolean;
   canRecordResults: boolean;
   canManage: boolean;
@@ -32,6 +33,7 @@ const TournamentsTab: React.FC<TournamentsTabProps> = ({
   matches,
   selectedTournamentId,
   onSelectTournament,
+  suggestedTeamSize,
   canCreate,
   canRecordResults,
   canManage,
@@ -53,6 +55,7 @@ const TournamentsTab: React.FC<TournamentsTabProps> = ({
     return (
       <TournamentWizard
         players={players}
+        suggestedTeamSize={suggestedTeamSize}
         onCreate={(draft) => {
           const createdId = onCreateTournament(draft);
           setIsWizardOpen(false);

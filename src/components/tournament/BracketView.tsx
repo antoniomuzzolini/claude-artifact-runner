@@ -13,21 +13,15 @@ const BracketSlotCard: React.FC<{
   slot: ResolvedSlot;
   getPlayerName: (playerId: number) => string;
 }> = ({ slot, getPlayerName }) => {
-  const scoreFor = (playerId: number | null): number | null => {
-    if (!slot.match || playerId === null) return null;
-    const teamIndex = slot.match.teams.findIndex(team => team.some(member => member.id === playerId));
-    return teamIndex === -1 ? null : slot.match.scores[teamIndex] ?? null;
-  };
-
   const renderSide = (
     playerId: number | null,
     isBye: boolean,
-    placeholder: string | null
+    placeholder: string | null,
+    score: number | null
   ) => {
     const isWinner = slot.winnerPlayerId !== null && playerId === slot.winnerPlayerId;
     const isUnresolved = isBye || playerId === null;
     const label = isBye ? 'Bye' : (playerId !== null ? getPlayerName(playerId) : placeholder ?? 'TBD');
-    const score = scoreFor(playerId);
     return (
       <div className={`flex items-center justify-between gap-2 px-3 py-1.5 ${
         isWinner ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'
@@ -50,9 +44,9 @@ const BracketSlotCard: React.FC<{
         ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-900/10 shadow-sm'
         : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
     }`}>
-      {renderSide(slot.homePlayerId, slot.homeIsBye, slot.homePlaceholder)}
+      {renderSide(slot.homePlayerId, slot.homeIsBye, slot.homePlaceholder, slot.homeScore)}
       <div className="border-t border-gray-100 dark:border-gray-700/60" />
-      {renderSide(slot.awayPlayerId, slot.awayIsBye, slot.awayPlaceholder)}
+      {renderSide(slot.awayPlayerId, slot.awayIsBye, slot.awayPlaceholder, slot.awayScore)}
     </div>
   );
 };

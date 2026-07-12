@@ -150,6 +150,107 @@ const bracketSeedOrder = (size: number): number[] => {
 };
 
 // ---------------------------------------------------------------------------
+// Sides: one competitor in a tournament — a single player (individual
+// tournaments) or a tournament-scoped team. Slots and standings work on side
+// ids; matches always store the real players (so individual ELO keeps working).
+// ---------------------------------------------------------------------------
+
+export type SideKind = 'player' | 'team';
+
+export const getSideMemberIds = (tournament: Tournament, sideId: number): number[] => {
+  const team = tournament.teams?.find(item => Number(item.id) === Number(sideId));
+  return team ? team.playerIds.map(Number) : [Number(sideId)];
+};
+
+export const getSideName = (
+  tournament: Tournament,
+  sideId: number,
+  playerName: (playerId: number) => string
+): string => {
+  const team = tournament.teams?.find(item => Number(item.id) === Number(sideId));
+  return team ? team.name : playerName(sideId);
+};
+
+const sideSource = (id: number, sideKind: SideKind): SlotSource => (
+  sideKind === 'team' ? { kind: 'team', teamId: id } : { kind: 'player', playerId: id }
+);
+
+// ---------------------------------------------------------------------------
+// Team formation (wizard): floor(N/S) teams of minimum size S; leftover
+// players join the weakest team one by one (recomputing averages), so no team
+// ends up with more than one extra member unless it stays the weakest.
+// ---------------------------------------------------------------------------
+
+const distributeReserves = (
+  teams: number[][],
+  leftovers: number[],
+  eloOf: (playerId: number) => number
+) => {
+  for (const playerId of leftovers) {
+    let weakestIndex = 0;
+    let weakestAvg = Infinity;
+    teams.forEach((team, index) => {
+      const avg = team.reduce((sum, id) => sum + eloOf(id), 0) / Math.max(1, team.length);
+      if (avg < weakestAvg) {
+        weakestAvg = avg;
+        weakestIndex = index;
+      }
+    });
+    teams[weakestIndex].push(playerId);
+  }
+};
+
+export const buildRandomTeamGroups = (
+  playerIds: number[],
+  teamSize: number,
+  eloOf: (playerId: number) => number
+): number[][] => {
+  const shuffled = [...playerIds];
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  const teamCount = Math.floor(playerIds.length / teamSize);
+  if (teamCount < 2) return [];
+  const teams = Array.from({ length: teamCount }, (_, index) =>
+    shuffled.slice(index * teamSize, (index + 1) * teamSize)
+  );
+  distributeReserves(teams, shuffled.slice(teamCount * teamSize), eloOf);
+  return teams;
+};
+
+// Snake draft over ELO: round 1 deals best players left-to-right, round 2
+// right-to-left, and so on — the classic balanced draft
+export const buildBalancedTeamGroups = (
+  playerIds: number[],
+  teamSize: number,
+  eloOf: (playerId: number) => number
+): number[][] => {
+  const sorted = [...playerIds].sort((a, b) => eloOf(b) - eloOf(a));
+  const teamCount = Math.floor(playerIds.length / teamSize);
+  if (teamCount < 2) return [];
+  const teams = Array.from({ length: teamCount }, () => [] as number[]);
+  for (let round = 0; round < teamSize; round += 1) {
+    for (let position = 0; position < teamCount; position += 1) {
+      const teamIndex = round % 2 === 0 ? position : teamCount - 1 - position;
+      teams[teamIndex].push(sorted[round * teamCount + position]);
+    }
+  }
+  distributeReserves(teams, sorted.slice(teamCount * teamSize), eloOf);
+  return teams;
+};
+
+// Default "players per team" for the wizard: the average team size seen in
+// the organization's matches so far
+export const suggestedTeamSize = (matches: Match[]): number => {
+  const sizes = matches.flatMap(match =>
+    Array.isArray(match.teams) ? match.teams.map(team => team.length) : []
+  );
+  if (sizes.length === 0) return 1;
+  return Math.max(1, Math.round(sizes.reduce((sum, size) => sum + size, 0) / sizes.length));
+};
+
+// ---------------------------------------------------------------------------
 // Structure builders (all slots are static; results flow in via matchId links)
 // ---------------------------------------------------------------------------
 
@@ -257,9 +358,12 @@ export const addConsolationBracket = (tournament: Tournament): TournamentSlot[] 
   const groupCount = tournament.config.groupCount ?? 0;
   const qualifiersPerGroup = tournament.config.qualifiersPerGroup ?? 2;
   if (groupCount < 1) return null;
-  // participantIds are stored in seed order: this rebuilds the exact same
-  // group distribution used at creation time
-  const groups = distributeIntoGroups(tournament.participantIds, groupCount);
+  // Sides are stored in seed order (teams or participantIds): this rebuilds
+  // the exact same group distribution used at creation time
+  const sideIds = (tournament.teams?.length ?? 0) > 0
+    ? tournament.teams!.map(team => Number(team.id))
+    : tournament.participantIds;
+  const groups = distributeIntoGroups(sideIds, groupCount);
   const consolationSlots = buildConsolationSlots(groups, qualifiersPerGroup);
   if (consolationSlots.length === 0) return null;
   return [...tournament.slots, ...consolationSlots];
@@ -291,7 +395,8 @@ const buildRoundRobinSlots = (
   ids: number[],
   phase: 'round_robin' | 'group',
   idPrefix: string,
-  group?: number
+  group?: number,
+  sideKind: SideKind = 'player'
 ): TournamentSlot[] => {
   const slots: TournamentSlot[] = [];
   roundRobinPairings(ids).forEach((pairs, roundIndex) => {
@@ -304,8 +409,8 @@ const buildRoundRobinSlots = (
         round: roundIndex + 1,
         position,
         ...(group !== undefined ? { group } : {}),
-        home: { kind: 'player', playerId: home },
-        away: { kind: 'player', playerId: away },
+        home: sideSource(home, sideKind),
+        away: sideSource(away, sideKind),
         matchId: null
       });
       position += 1;
@@ -328,26 +433,27 @@ export const distributeIntoGroups = (seededIds: number[], groupCount: number): n
 
 const buildSwissRoundSlots = (
   pairs: [number, number][],
-  byePlayerId: number | null,
-  round: number
+  byeSideId: number | null,
+  round: number,
+  sideKind: SideKind = 'player'
 ): TournamentSlot[] => {
   const slots: TournamentSlot[] = pairs.map(([home, away], position) => ({
     id: `sw-r${round}-${position}`,
     phase: 'swiss',
     round,
     position,
-    home: { kind: 'player', playerId: home },
-    away: { kind: 'player', playerId: away },
+    home: sideSource(home, sideKind),
+    away: sideSource(away, sideKind),
     matchId: null
   }));
 
-  if (byePlayerId !== null) {
+  if (byeSideId !== null) {
     slots.push({
       id: `sw-r${round}-bye`,
       phase: 'swiss',
       round,
       position: slots.length,
-      home: { kind: 'player', playerId: byePlayerId },
+      home: sideSource(byeSideId, sideKind),
       away: { kind: 'bye' },
       matchId: null
     });
@@ -359,24 +465,25 @@ const buildSwissRoundSlots = (
 export const createTournamentSlots = (
   format: TournamentFormat,
   seededIds: number[],
-  config: TournamentConfig
+  config: TournamentConfig,
+  sideKind: SideKind = 'player'
 ): TournamentSlot[] => {
   switch (format) {
     case 'single_elimination': {
       const knockoutSlots = buildKnockoutSlots(
-        seededIds.map(playerId => ({ kind: 'player', playerId } as SlotSource)),
+        seededIds.map(id => sideSource(id, sideKind)),
         'ko'
       );
       return config.thirdPlaceMatch ? appendThirdPlaceSlot(knockoutSlots, 'ko') : knockoutSlots;
     }
     case 'round_robin':
-      return buildRoundRobinSlots(seededIds, 'round_robin', 'rr');
+      return buildRoundRobinSlots(seededIds, 'round_robin', 'rr', undefined, sideKind);
     case 'groups_knockout': {
       const groupCount = config.groupCount ?? defaultGroupCount(seededIds.length);
       const qualifiersPerGroup = config.qualifiersPerGroup ?? 2;
       const groups = distributeIntoGroups(seededIds, groupCount);
       const groupSlots = groups.flatMap((groupIds, groupIndex) =>
-        buildRoundRobinSlots(groupIds, 'group', `g${groupIndex + 1}`, groupIndex)
+        buildRoundRobinSlots(groupIds, 'group', `g${groupIndex + 1}`, groupIndex, sideKind)
       );
 
       // Qualifier seeding: all first-ranked (group order), then all second-ranked,
@@ -401,14 +508,14 @@ export const createTournamentSlots = (
       return [...groupSlots, ...knockoutSlots, ...consolationSlots];
     }
     case 'swiss': {
-      // Round 1: top half vs bottom half by seed; odd player count -> last seed rests
+      // Round 1: top half vs bottom half by seed; odd side count -> last seed rests
       const half = Math.floor(seededIds.length / 2);
       const hasBye = seededIds.length % 2 === 1;
       const pairs: [number, number][] = [];
       for (let i = 0; i < half; i += 1) {
         pairs.push([seededIds[i], seededIds[i + half]]);
       }
-      return buildSwissRoundSlots(pairs, hasBye ? seededIds[seededIds.length - 1] : null, 1);
+      return buildSwissRoundSlots(pairs, hasBye ? seededIds[seededIds.length - 1] : null, 1, sideKind);
     }
     default:
       return [];
@@ -419,6 +526,8 @@ export const createTournamentSlots = (
 // Derived state (structure + recorded matches -> resolved bracket/standings)
 // ---------------------------------------------------------------------------
 
+// NOTE: the *PlayerId fields hold SIDE ids — player ids in individual
+// tournaments, team ids in team tournaments. Names kept for compatibility.
 export interface ResolvedSlot extends TournamentSlot {
   homePlayerId: number | null;
   awayPlayerId: number | null;
@@ -427,6 +536,8 @@ export interface ResolvedSlot extends TournamentSlot {
   homePlaceholder: string | null; // e.g. "Winner of SF1", "1st Group A" (when unresolved)
   awayPlaceholder: string | null;
   match: Match | null;
+  homeScore: number | null; // side-aware scores, resolved from the match
+  awayScore: number | null;
   winnerPlayerId: number | null;
   isDraw: boolean;
   status: 'pending' | 'ready' | 'done' | 'bye';
@@ -463,8 +574,13 @@ interface MatchOutcome {
   draw: boolean;
 }
 
-const matchScoreFor = (match: Match, playerId: number): MatchOutcome | null => {
-  const teamIndex = match.teams.findIndex(team => team.some(member => member.id === playerId));
+// Outcome of a match for one side, located by membership: a side's team in the
+// match is the one containing any of its member players (for individual sides
+// the member list is just [sideId])
+const matchScoreFor = (match: Match, memberIds: number[]): MatchOutcome | null => {
+  const teamIndex = match.teams.findIndex(team =>
+    team.some(member => memberIds.includes(Number(member.id)))
+  );
   if (teamIndex === -1) return null;
   const scored = match.scores[teamIndex] ?? 0;
   const conceded = match.scores
@@ -494,12 +610,13 @@ const pointsForBye = (config: TournamentConfig): number => (
 
 const buildStandings = (
   slots: ResolvedSlot[],
-  participantIds: number[],
+  sideIds: number[],
   config: TournamentConfig,
-  seedIndexById: Map<number, number>
+  seedIndexById: Map<number, number>,
+  memberIdsOf: (sideId: number) => number[] = (sideId) => [sideId]
 ): StandingsRow[] => {
   const rows = new Map<number, StandingsRow>();
-  participantIds.forEach(playerId => {
+  sideIds.forEach(playerId => {
     rows.set(playerId, {
       playerId,
       played: 0,
@@ -528,7 +645,7 @@ const buildStandings = (
     for (const playerId of [slot.homePlayerId, slot.awayPlayerId]) {
       if (playerId === null) continue;
       const row = rows.get(playerId);
-      const outcome = matchScoreFor(slot.match, playerId);
+      const outcome = matchScoreFor(slot.match, memberIdsOf(playerId));
       if (!row || !outcome) continue;
       row.played += 1;
       row.scoreFor += outcome.scored;
@@ -556,7 +673,7 @@ const buildStandings = (
         ? slot.awayPlayerId
         : (slot.awayPlayerId === playerId ? slot.homePlayerId : null);
       if (opponent === null || !tiedIds.has(opponent)) continue;
-      const outcome = matchScoreFor(slot.match, playerId);
+      const outcome = matchScoreFor(slot.match, memberIdsOf(playerId));
       if (!outcome) continue;
       points += pointsForOutcome(outcome, config);
     }
@@ -595,7 +712,13 @@ export const computeTournamentState = (
 ): TournamentState => {
   // ids may arrive as strings (Postgres BIGINT) — compare numerically
   const matchById = new Map(matches.map(match => [Number(match.id), match]));
-  const seedIndexById = new Map(tournament.participantIds.map((id, index) => [id, index]));
+  // Sides: teams when present, individual players otherwise (in seed order)
+  const isTeamTournament = (tournament.teams?.length ?? 0) > 0;
+  const sideIds = isTeamTournament
+    ? tournament.teams!.map(team => Number(team.id))
+    : tournament.participantIds;
+  const memberIdsOf = (sideId: number) => getSideMemberIds(tournament, sideId);
+  const seedIndexById = new Map(sideIds.map((id, index) => [id, index]));
   const resolvedById = new Map<string, ResolvedSlot>();
   const slotById = new Map(tournament.slots.map(slot => [slot.id, slot]));
   const totalKnockoutRounds = tournament.slots
@@ -633,6 +756,8 @@ export const computeTournamentState = (
     switch (source.kind) {
       case 'player':
         return { playerId: source.playerId, isBye: false };
+      case 'team':
+        return { playerId: source.teamId, isBye: false };
       case 'bye':
         return { playerId: null, isBye: true };
       case 'winner': {
@@ -668,6 +793,8 @@ export const computeTournamentState = (
     let winnerPlayerId: number | null = null;
     let isDraw = false;
     let status: ResolvedSlot['status'] = 'pending';
+    let homeScore: number | null = null;
+    let awayScore: number | null = null;
 
     if (home.isBye && away.isBye) {
       status = 'bye';
@@ -676,10 +803,17 @@ export const computeTournamentState = (
       status = 'bye';
     } else if (match && home.playerId !== null && away.playerId !== null) {
       isDraw = match.winnerIndex === null;
+      const homeOutcome = matchScoreFor(match, memberIdsOf(home.playerId));
+      const awayOutcome = matchScoreFor(match, memberIdsOf(away.playerId));
+      homeScore = homeOutcome?.scored ?? null;
+      awayScore = awayOutcome?.scored ?? null;
       if (!isDraw) {
-        const winningTeam = match.teams[match.winnerIndex!] ?? [];
-        const winnerId = winningTeam[0]?.id ?? null;
-        winnerPlayerId = winnerId === home.playerId || winnerId === away.playerId ? winnerId : null;
+        // The winning side is the one whose members appear in the winning team
+        if (homeOutcome?.won) {
+          winnerPlayerId = home.playerId;
+        } else if (awayOutcome?.won) {
+          winnerPlayerId = away.playerId;
+        }
       }
       status = 'done';
     } else if (home.playerId !== null && away.playerId !== null) {
@@ -695,6 +829,8 @@ export const computeTournamentState = (
       homePlaceholder: home.playerId === null && !home.isBye ? placeholderFor(slot.home) : null,
       awayPlaceholder: away.playerId === null && !away.isBye ? placeholderFor(slot.away) : null,
       match,
+      homeScore,
+      awayScore,
       winnerPlayerId,
       isDraw,
       status
@@ -712,12 +848,13 @@ export const computeTournamentState = (
     .map(slot => resolvedById.get(slot.id)!);
 
   if (tournament.format === 'groups_knockout' && groupCount > 0) {
-    const groups = distributeIntoGroups(tournament.participantIds, groupCount);
+    const groups = distributeIntoGroups(sideIds, groupCount);
     groupStandings = groups.map((groupIds, groupIndex) => buildStandings(
       nonKnockoutResolved.filter(slot => slot.group === groupIndex),
       groupIds,
       tournament.config,
-      seedIndexById
+      seedIndexById,
+      memberIdsOf
     ));
     isGroupPhaseComplete = nonKnockoutResolved
       .filter(slot => slot.phase === 'group')
@@ -735,7 +872,7 @@ export const computeTournamentState = (
 
   let standings: StandingsRow[] | null = null;
   if (tournament.format === 'round_robin' || tournament.format === 'swiss') {
-    standings = buildStandings(slots, tournament.participantIds, tournament.config, seedIndexById);
+    standings = buildStandings(slots, sideIds, tournament.config, seedIndexById, memberIdsOf);
   }
 
   const swissSlots = slots.filter(slot => slot.phase === 'swiss');
@@ -849,7 +986,8 @@ export const generateNextSwissRound = (
     }
   }
 
-  return buildSwissRoundSlots(pairs, byePlayerId, nextRound);
+  const sideKind: SideKind = (tournament.teams?.length ?? 0) > 0 ? 'team' : 'player';
+  return buildSwissRoundSlots(pairs, byePlayerId, nextRound, sideKind);
 };
 
 // ---------------------------------------------------------------------------

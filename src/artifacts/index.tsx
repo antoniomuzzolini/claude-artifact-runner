@@ -25,8 +25,10 @@ import {
   addThirdPlaceMatch,
   createTournamentSlots,
   generateNextSwissRound,
+  getSideMemberIds,
   orderParticipants,
-  slotContextLabel
+  slotContextLabel,
+  suggestedTeamSize
 } from '../utils/tournament';
 
 // Import tab components
@@ -304,9 +306,29 @@ const ChampionshipManager = () => {
       return null;
     }
 
-    const eloById = new Map(selectedSeasonPlayers.map(player => [player.id, player.elo]));
-    const seededIds = orderParticipants(draft.participantIds, draft.seeding, eloById);
-    const slots = createTournamentSlots(draft.format, seededIds, draft.config);
+    // Team tournaments: the wizard delivers the teams already composed and in
+    // seed order; sides in the bracket are team ids. Individual tournaments
+    // keep the existing player-seeding path.
+    const isTeamDraft = (draft.teams?.length ?? 0) > 1;
+    const teams = isTeamDraft
+      ? draft.teams!.map((team, index) => ({
+          id: index + 1,
+          name: team.name.trim() || `Team ${index + 1}`,
+          playerIds: team.playerIds
+        }))
+      : undefined;
+
+    let seededIds: number[];
+    let participantIds: number[];
+    if (teams) {
+      seededIds = teams.map(team => team.id);
+      participantIds = teams.flatMap(team => team.playerIds);
+    } else {
+      const eloById = new Map(selectedSeasonPlayers.map(player => [player.id, player.elo]));
+      seededIds = orderParticipants(draft.participantIds, draft.seeding, eloById);
+      participantIds = seededIds;
+    }
+    const slots = createTournamentSlots(draft.format, seededIds, draft.config, teams ? 'team' : 'player');
 
     let tournamentId = Date.now() + Math.floor(Math.random() * 1000);
     const existingIds = new Set(tournaments.map(tournament => tournament.id));
@@ -319,8 +341,9 @@ const ChampionshipManager = () => {
       name: draft.name,
       format: draft.format,
       seeding: draft.seeding,
-      participantIds: seededIds,
+      participantIds,
       config: draft.config,
+      ...(teams ? { teams } : {}),
       slots,
       organization_id: organization.id,
       season_id: currentSeasonId,
@@ -361,16 +384,20 @@ const ChampionshipManager = () => {
       return { ...basePlayer, elo: 1200, matches: 0, wins: 0, losses: 0 };
     };
 
-    const homePlayer = resolveSeasonPlayer(slot.homePlayerId);
-    const awayPlayer = resolveSeasonPlayer(slot.awayPlayerId);
-    if (!homePlayer || !awayPlayer) {
+    // Slot sides are players or teams; the match always stores the real
+    // players, so individual ELO updates work the same in both cases
+    const sideMembers = [slot.homePlayerId, slot.awayPlayerId].map(sideId =>
+      getSideMemberIds(tournament, sideId!).map(resolveSeasonPlayer)
+    );
+    if (sideMembers.some(members => members.some(member => member === null) || members.length === 0)) {
       alert('Tournament player not found.');
       return;
     }
+    const teamsPlayers = sideMembers as Player[][];
 
     const scores = [homeScore, awayScore];
     const { winnerIndex, eloChanges } = calculateMultiTeamEloChanges(
-      [[homePlayer], [awayPlayer]],
+      teamsPlayers,
       scores,
       eloKFactor
     );
@@ -385,10 +412,7 @@ const ChampionshipManager = () => {
       id: matchId,
       date: new Date().toLocaleDateString('en-US'),
       time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-      teams: [
-        [{ id: homePlayer.id, name: homePlayer.name }],
-        [{ id: awayPlayer.id, name: awayPlayer.name }]
-      ],
+      teams: teamsPlayers.map(team => team.map(member => ({ id: member.id, name: member.name }))),
       scores,
       winnerIndex,
       eloChanges,
@@ -482,13 +506,15 @@ const ChampionshipManager = () => {
       return { ...basePlayer, elo: 1200, matches: 0, wins: 0, losses: 0 };
     };
 
-    const homePlayer = resolveSeasonPlayer(slot.homePlayerId);
-    const awayPlayer = resolveSeasonPlayer(slot.awayPlayerId);
-    if (!homePlayer || !awayPlayer) return;
+    const sideMembers = [slot.homePlayerId, slot.awayPlayerId].map(sideId =>
+      getSideMemberIds(tournament, sideId!).map(resolveSeasonPlayer)
+    );
+    if (sideMembers.some(members => members.some(member => member === null) || members.length === 0)) return;
+    const teamsPlayers = sideMembers as Player[][];
 
     const scores = [homeScore, awayScore];
     const { winnerIndex, eloChanges } = calculateMultiTeamEloChanges(
-      [[homePlayer], [awayPlayer]],
+      teamsPlayers,
       scores,
       eloKFactor
     );
@@ -1051,6 +1077,7 @@ const ChampionshipManager = () => {
                 matches={matches}
                 selectedTournamentId={selectedTournamentId}
                 onSelectTournament={setSelectedTournamentId}
+                suggestedTeamSize={suggestedTeamSize(matches)}
                 canCreate={user?.role === 'superuser' && isViewingCurrentSeason}
                 canRecordResults={isViewingCurrentSeason}
                 canManage={user?.role === 'superuser'}

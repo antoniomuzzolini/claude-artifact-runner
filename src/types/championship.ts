@@ -58,10 +58,21 @@ export type TournamentPhase = 'round_robin' | 'group' | 'knockout' | 'swiss' | '
 
 export type SlotSource =
   | { kind: 'player'; playerId: number }
+  | { kind: 'team'; teamId: number } // team tournaments: id of a TournamentTeam
   | { kind: 'winner'; slotId: string }
   | { kind: 'loser'; slotId: string } // e.g. third-place match fed by semifinal losers
   | { kind: 'qualifier'; group: number; rank: number }
   | { kind: 'bye' };
+
+// Tournament-scoped team: exists only within one tournament, no persistence
+// beyond it. Members are regular players; their individual ELO is updated by
+// the matches the team plays. Extra players beyond the minimum team size
+// (reserves) sit at the end of playerIds.
+export interface TournamentTeam {
+  id: number; // unique within the tournament (1..N), disjoint from slot ids
+  name: string;
+  playerIds: number[];
+}
 
 export interface TournamentSlot {
   id: string;
@@ -87,6 +98,7 @@ export interface TournamentConfig {
   pointsScheme?: TournamentPointsScheme;
   thirdPlaceMatch?: boolean; // knockout phase: play a 3rd/4th place final
   consolationBracket?: boolean; // groups_knockout: knockout bracket among non-qualifiers
+  teamSize?: number; // minimum players per team; 1/absent = individual tournament
 }
 
 export interface Tournament {
@@ -94,8 +106,9 @@ export interface Tournament {
   name: string;
   format: TournamentFormat;
   seeding: TournamentSeedingMode;
-  participantIds: number[]; // in seed order
+  participantIds: number[]; // in seed order (players; for team tournaments: all members)
   config: TournamentConfig;
+  teams?: TournamentTeam[]; // in seed order; present only for team tournaments
   slots: TournamentSlot[];
   organization_id: number;
   season_id: number;

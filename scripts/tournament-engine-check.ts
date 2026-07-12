@@ -4,10 +4,15 @@ import { Match, Tournament, TournamentConfig, TournamentFormat } from '../src/ty
 import {
   addConsolationBracket,
   addThirdPlaceMatch,
+  buildBalancedTeamGroups,
+  buildRandomTeamGroups,
   computeTournamentState,
   createTournamentSlots,
   generateNextSwissRound,
+  getSideMemberIds,
+  getSideName,
   suggestFormats,
+  suggestedTeamSize,
   DEFAULT_POINTS_DRAW,
   DEFAULT_POINTS_WIN
 } from '../src/utils/tournament';
@@ -422,6 +427,140 @@ console.log('3rd place unavailable for a 2-player bracket');
   const tournament = makeTournament('single_elimination', [1, 2], { thirdPlaceMatch: true });
   check('no 3rd place slot without semifinals', tournament.slots.every(slot => slot.home.kind !== 'loser'));
   check('late add also refuses', addThirdPlaceMatch(tournament) === null);
+}
+
+// --- team formation --------------------------------------------------------------
+console.log('balanced team formation (snake draft + reserves to weakest)');
+{
+  const elos: Record<number, number> = { 1: 2000, 2: 1600, 3: 1400, 4: 1300, 5: 1200, 6: 1100, 7: 1000 };
+  const eloOf = (id: number) => elos[id];
+  const teams = buildBalancedTeamGroups([1, 2, 3, 4, 5, 6, 7], 2, eloOf);
+  check('3 teams from 7 players at size 2', teams.length === 3);
+  check('snake draft pairs best with worst', (
+    teams[0].join(',') === '1,6' && teams[1].join(',') === '2,5' && teams[2].slice(0, 2).join(',') === '3,4'
+  ));
+  check('reserve joins the weakest team', teams[2].length === 3 && teams[2][2] === 7);
+  check('everyone is placed exactly once', new Set(teams.flat()).size === 7);
+
+  const randomTeams = buildRandomTeamGroups([1, 2, 3, 4, 5, 6, 7], 2, eloOf);
+  check('random draw: 3 teams, everyone placed', (
+    randomTeams.length === 3 && new Set(randomTeams.flat()).size === 7
+  ));
+  check('random draw: exactly one team of 3', randomTeams.filter(team => team.length === 3).length === 1);
+}
+
+console.log('suggested team size from match history');
+{
+  const twoVsTwo = [makeMatch(1, 2, 10, 5), makeMatch(3, 4, 10, 5)].map(match => ({
+    ...match,
+    teams: match.teams.map(team => [...team, { id: team[0].id + 10, name: 'X' }])
+  }));
+  check('2v2 history suggests 2', suggestedTeamSize(twoVsTwo) === 2);
+  check('1v1 history suggests 1', suggestedTeamSize([makeMatch(1, 2, 10, 5)]) === 1);
+  check('no history suggests 1', suggestedTeamSize([]) === 1);
+}
+
+// --- team tournaments -------------------------------------------------------------
+const makeTeamMatch = (
+  tournament: Tournament,
+  firstSideId: number,
+  secondSideId: number,
+  firstScore: number,
+  secondScore: number
+): Match => ({
+  id: matchIdCounter++,
+  date: '1/1/2026',
+  time: '10:00',
+  teams: [firstSideId, secondSideId].map(sideId =>
+    getSideMemberIds(tournament, sideId).map(id => ({ id, name: `P${id}` }))
+  ),
+  scores: [firstScore, secondScore],
+  winnerIndex: firstScore === secondScore ? null : (firstScore > secondScore ? 0 : 1),
+  eloChanges: {},
+  organization_id: 1,
+  season_id: 1
+});
+
+console.log('team round robin (3 teams of 2, winner resolved by membership)');
+{
+  const tournament = makeTournament('round_robin', [1, 2, 3, 4, 5, 6], { teamSize: 2 });
+  tournament.teams = [
+    { id: 1, name: 'Alpha', playerIds: [1, 6] },
+    { id: 2, name: 'Beta', playerIds: [2, 5] },
+    { id: 3, name: 'Gamma', playerIds: [3, 4] }
+  ];
+  tournament.slots = createTournamentSlots('round_robin', [1, 2, 3], tournament.config, 'team');
+  check('3 slots for 3 teams', tournament.slots.length === 3);
+  check('side names resolve to team names', getSideName(tournament, 2, () => '?') === 'Beta');
+
+  const matches: Match[] = [];
+  const playPair = (a: number, b: number, sa: number, sb: number, reversed = false) => {
+    const slot = tournament.slots.find(s => {
+      const ids = [s.home, s.away].map(src => (src.kind === 'team' ? src.teamId : -1));
+      return ids.includes(a) && ids.includes(b);
+    })!;
+    const match = reversed
+      ? makeTeamMatch(tournament, b, a, sb, sa)
+      : makeTeamMatch(tournament, a, b, sa, sb);
+    matches.push(match);
+    slot.matchId = match.id;
+  };
+  playPair(1, 2, 10, 5);
+  // recorded with the away side listed first in the match: membership must
+  // still find each team's score
+  playPair(1, 3, 10, 3, true);
+  playPair(2, 3, 10, 7);
+
+  const state = computeTournamentState(tournament, matches);
+  check('all slots done', state.slots.every(slot => slot.status === 'done'));
+  check('winners are team ids', state.slots.every(slot => [1, 2].includes(slot.winnerPlayerId!)));
+  const reversedSlot = state.slots.find(slot => {
+    const ids = [slot.home, slot.away].map(src => (src.kind === 'team' ? src.teamId : -1));
+    return ids.includes(1) && ids.includes(3);
+  })!;
+  check('reversed match still resolves side scores', (
+    (reversedSlot.homePlayerId === 1 ? reversedSlot.homeScore : reversedSlot.awayScore) === 10
+  ));
+  check('standings ranked Alpha, Beta, Gamma', state.standings!.map(row => row.playerId).join(',') === '1,2,3');
+  check('team champion is Alpha', state.isComplete && state.championId === 1);
+}
+
+console.log('team knockout (4 teams of 2, third place included)');
+{
+  const tournament = makeTournament('single_elimination', [1, 2, 3, 4, 5, 6, 7, 8], {
+    teamSize: 2,
+    thirdPlaceMatch: true
+  });
+  tournament.teams = [
+    { id: 1, name: 'T1', playerIds: [1, 8] },
+    { id: 2, name: 'T2', playerIds: [2, 7] },
+    { id: 3, name: 'T3', playerIds: [3, 6] },
+    { id: 4, name: 'T4', playerIds: [4, 5] }
+  ];
+  tournament.slots = createTournamentSlots('single_elimination', [1, 2, 3, 4], tournament.config, 'team');
+  check('4 slots (2 SF + final + 3rd place)', tournament.slots.length === 4);
+
+  const matches: Match[] = [];
+  for (let guard = 0; guard < 10; guard += 1) {
+    const state = computeTournamentState(tournament, matches);
+    const ready = state.slots.filter(slot => slot.status === 'ready');
+    if (ready.length === 0) break;
+    for (const slot of ready) {
+      const home = slot.homePlayerId!;
+      const away = slot.awayPlayerId!;
+      const homeWins = home < away; // lower team id always wins
+      const match = makeTeamMatch(tournament, home, away, homeWins ? 10 : 5, homeWins ? 5 : 10);
+      matches.push(match);
+      tournament.slots.find(s => s.id === slot.id)!.matchId = match.id;
+    }
+  }
+
+  const final = computeTournamentState(tournament, matches);
+  check('team knockout completes', final.isComplete);
+  check('champion is team 1', final.championId === 1);
+  const thirdSlot = final.slots.find(slot => slot.home.kind === 'loser')!;
+  check('bronze goes to team 3 (best semifinal loser)', thirdSlot.winnerPlayerId === 3);
+  check('4 matches played', final.playedMatches === 4);
 }
 
 console.log(failures === 0 ? '\nAll checks passed.' : `\n${failures} check(s) FAILED.`);

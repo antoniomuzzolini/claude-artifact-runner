@@ -7,6 +7,7 @@ import {
   ResolvedSlot,
   computeTournamentState,
   formatLabel,
+  getSideName,
   groupLetter,
   knockoutRoundLabel,
   slotContextLabel
@@ -59,14 +60,8 @@ const MatchRow: React.FC<{
   const homeName = sideName(slot.homePlayerId, slot.homeIsBye, slot.homePlaceholder, getPlayerName);
   const awayName = sideName(slot.awayPlayerId, slot.awayIsBye, slot.awayPlaceholder, getPlayerName);
 
-  const scoreFor = (playerId: number | null): number | null => {
-    if (!slot.match || playerId === null) return null;
-    const teamIndex = slot.match.teams.findIndex(team => team.some(member => member.id === playerId));
-    return teamIndex === -1 ? null : slot.match.scores[teamIndex] ?? null;
-  };
-
-  const homeScore = scoreFor(slot.homePlayerId);
-  const awayScore = scoreFor(slot.awayPlayerId);
+  const homeScore = slot.homeScore;
+  const awayScore = slot.awayScore;
   const homeWon = slot.winnerPlayerId !== null && slot.winnerPlayerId === slot.homePlayerId;
   const awayWon = slot.winnerPlayerId !== null && slot.winnerPlayerId === slot.awayPlayerId;
   const homeUnresolved = slot.homeIsBye || slot.homePlayerId === null;
@@ -235,6 +230,9 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
     [players]
   );
   const getPlayerName = (playerId: number) => nameById.get(playerId) ?? `Player ${playerId}`;
+  // Sides are teams in team tournaments, players otherwise — every list/bracket
+  // below labels sides, not raw players
+  const getSideLabel = (sideId: number) => getSideName(tournament, sideId, getPlayerName);
 
   const knockoutSlots = state.slots.filter(slot => slot.phase === 'knockout');
   const groupSlots = state.slots.filter(slot => slot.phase === 'group');
@@ -329,7 +327,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
         <StandingsTable
           key={groupIndex}
           rows={state.groupStandings[groupIndex] ?? []}
-          getPlayerName={getPlayerName}
+          getPlayerName={getSideLabel}
           qualifiedCount={tournament.config.qualifiersPerGroup ?? 0}
           title={`Group ${groupLetter(groupIndex)}`}
         />
@@ -337,7 +335,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
     </div>
   ) : state.standings ? (
     <div className="max-w-2xl">
-      <StandingsTable rows={state.standings} getPlayerName={getPlayerName} />
+      <StandingsTable rows={state.standings} getPlayerName={getSideLabel} />
       {tournament.format === 'swiss' && (
         <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
           Rounds played: {state.swissRoundsGenerated}/{tournament.config.swissRounds ?? state.swissRoundsGenerated}
@@ -354,7 +352,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
             The bracket fills in as group matches are completed.
           </p>
         )}
-        <BracketView slots={mainKnockoutSlots} getPlayerName={getPlayerName} />
+        <BracketView slots={mainKnockoutSlots} getPlayerName={getSideLabel} />
       </div>
       {thirdPlaceSlot && (
         <div>
@@ -363,7 +361,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
           </h3>
           <BracketView
             slots={[{ ...thirdPlaceSlot, round: 1, position: 0 }]}
-            getPlayerName={getPlayerName}
+            getPlayerName={getSideLabel}
             roundLabel={() => '3rd Place'}
           />
         </div>
@@ -376,7 +374,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
               (players not qualified from the groups)
             </span>
           </h3>
-          <BracketView slots={consolationSlots} getPlayerName={getPlayerName} />
+          <BracketView slots={consolationSlots} getPlayerName={getSideLabel} />
         </div>
       )}
     </div>
@@ -408,7 +406,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
           {state.isComplete && state.championId !== null && (
             <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 px-3 py-1.5 rounded-full max-w-full">
               <Crown className="w-4 h-4 shrink-0" />
-              <span className="truncate">{getPlayerName(state.championId)}</span>
+              <span className="truncate">{getSideLabel(state.championId)}</span>
             </span>
           )}
           <LiveToggle isLive={isAutoRefreshOn} onToggle={() => setIsAutoRefreshOn(prev => !prev)} />
@@ -437,7 +435,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
             {podium.second !== null && (
               <PodiumStep
                 place="2nd"
-                names={[getPlayerName(podium.second)]}
+                names={[getSideLabel(podium.second)]}
                 heightClass="h-16"
                 colorClass="bg-gray-400 dark:bg-gray-500"
                 medal="🥈"
@@ -445,7 +443,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
             )}
             <PodiumStep
               place="1st"
-              names={[getPlayerName(podium.first)]}
+              names={[getSideLabel(podium.first)]}
               heightClass="h-24"
               colorClass="bg-amber-400 dark:bg-amber-500"
               medal="🥇"
@@ -453,7 +451,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
             {podium.thirds.length > 0 && (
               <PodiumStep
                 place="3rd"
-                names={podium.thirds.map(getPlayerName)}
+                names={podium.thirds.map(getSideLabel)}
                 heightClass="h-12"
                 colorClass="bg-orange-400 dark:bg-orange-600"
                 medal="🥉"
@@ -504,7 +502,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
             <>
               <RoundsList
                 slots={mainKnockoutSlots.filter(slot => slot.status !== 'bye')}
-                getPlayerName={getPlayerName}
+                getPlayerName={getSideLabel}
                 allowDraw={false}
                 canRecordResults={canRecordResults}
                 roundLabel={(round) => knockoutRoundLabel(round, totalKnockoutRounds)}
@@ -514,7 +512,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
               {thirdPlaceSlot && thirdPlaceSlot.status !== 'bye' && (
                 <RoundsList
                   slots={[thirdPlaceSlot]}
-                  getPlayerName={getPlayerName}
+                  getPlayerName={getSideLabel}
                   allowDraw={false}
                   canRecordResults={canRecordResults}
                   roundLabel={() => '3rd Place Match'}
@@ -528,7 +526,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
           {tournament.format === 'round_robin' && (
             <RoundsList
               slots={roundRobinSlots}
-              getPlayerName={getPlayerName}
+              getPlayerName={getSideLabel}
               allowDraw={allowDraws}
               canRecordResults={canRecordResults}
               onRecordResult={handleRecord}
@@ -545,7 +543,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
                   </h3>
                   <RoundsList
                     slots={groupSlots.filter(slot => slot.group === groupIndex)}
-                    getPlayerName={getPlayerName}
+                    getPlayerName={getSideLabel}
                     allowDraw={allowDraws}
                     canRecordResults={canRecordResults}
                     isSlotEditable={() => !hasKnockoutResults}
@@ -565,7 +563,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
                 </h3>
                 <RoundsList
                   slots={mainKnockoutSlots.filter(slot => slot.status !== 'bye')}
-                  getPlayerName={getPlayerName}
+                  getPlayerName={getSideLabel}
                   allowDraw={false}
                   canRecordResults={canRecordResults}
                   roundLabel={(round) => knockoutRoundLabel(round, totalKnockoutRounds)}
@@ -580,7 +578,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
                   </h3>
                   <RoundsList
                     slots={[thirdPlaceSlot]}
-                    getPlayerName={getPlayerName}
+                    getPlayerName={getSideLabel}
                     allowDraw={false}
                     canRecordResults={canRecordResults}
                     roundLabel={() => '3rd Place Match'}
@@ -601,7 +599,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
                   </h3>
                   <RoundsList
                     slots={consolationSlots.filter(slot => slot.status !== 'bye')}
-                    getPlayerName={getPlayerName}
+                    getPlayerName={getSideLabel}
                     allowDraw={false}
                     canRecordResults={canRecordResults}
                     roundLabel={(round) => `Consolation · Round ${round}`}
@@ -626,7 +624,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
               )}
               <RoundsList
                 slots={swissSlots}
-                getPlayerName={getPlayerName}
+                getPlayerName={getSideLabel}
                 allowDraw={allowDraws}
                 canRecordResults={canRecordResults}
                 isSlotEditable={(slot) => slot.round === state.swissRoundsGenerated}
@@ -661,6 +659,28 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Rosters (team tournaments): who plays in which team */}
+      {(tournament.teams?.length ?? 0) > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">Teams</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {tournament.teams!.map(team => (
+              <div
+                key={team.id}
+                className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3"
+              >
+                <div className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                  {team.name}
+                </div>
+                <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {team.playerIds.map(playerId => getPlayerName(playerId)).join(', ')}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
