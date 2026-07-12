@@ -11,6 +11,8 @@ interface TournamentsTabProps {
   tournaments: Tournament[]; // scoped to the selected season
   players: Player[];
   matches: Match[];
+  selectedTournamentId: number | null; // lifted so the URL can deep-link it
+  onSelectTournament: (tournamentId: number | null) => void;
   canCreate: boolean;
   canRecordResults: boolean;
   canManage: boolean;
@@ -28,6 +30,8 @@ const TournamentsTab: React.FC<TournamentsTabProps> = ({
   tournaments,
   players,
   matches,
+  selectedTournamentId,
+  onSelectTournament,
   canCreate,
   canRecordResults,
   canManage,
@@ -41,7 +45,6 @@ const TournamentsTab: React.FC<TournamentsTabProps> = ({
   onRefresh
 }) => {
   const [isWizardOpen, setIsWizardOpen] = useState(false);
-  const [selectedTournamentId, setSelectedTournamentId] = useState<number | null>(null);
 
   const nameById = new Map(players.map(player => [player.id, player.name]));
   const selectedTournament = tournaments.find(tournament => tournament.id === selectedTournamentId) ?? null;
@@ -54,7 +57,7 @@ const TournamentsTab: React.FC<TournamentsTabProps> = ({
           const createdId = onCreateTournament(draft);
           setIsWizardOpen(false);
           if (createdId !== null) {
-            setSelectedTournamentId(createdId);
+            onSelectTournament(createdId);
           }
         }}
         onCancel={() => setIsWizardOpen(false)}
@@ -80,27 +83,27 @@ const TournamentsTab: React.FC<TournamentsTabProps> = ({
         onDelete={async (tournament) => {
           const deleted = await onDeleteTournament(tournament);
           if (deleted) {
-            setSelectedTournamentId(null);
+            onSelectTournament(null);
           }
         }}
-        onBack={() => setSelectedTournamentId(null)}
+        onBack={() => onSelectTournament(null)}
       />
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <Swords className="w-6 h-6 text-blue-500" />
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Tournaments</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Swords className="w-6 h-6 text-blue-500 shrink-0" />
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white truncate">Tournaments</h2>
         </div>
         {canCreate && (
           <button
             onClick={() => setIsWizardOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors duration-200"
+            className="inline-flex items-center gap-2 px-4 py-2 whitespace-nowrap bg-blue-600 dark:bg-blue-500 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors duration-200"
           >
-            <PlusCircle className="w-4 h-4" />
+            <PlusCircle className="w-4 h-4 shrink-0" />
             New Tournament
           </button>
         )}
@@ -124,7 +127,7 @@ const TournamentsTab: React.FC<TournamentsTabProps> = ({
             return (
               <button
                 key={tournament.id}
-                onClick={() => setSelectedTournamentId(tournament.id)}
+                onClick={() => onSelectTournament(tournament.id)}
                 className="text-left rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 transition-all duration-200 hover:shadow-md hover:border-blue-400"
               >
                 <div className="flex items-center justify-between gap-3">

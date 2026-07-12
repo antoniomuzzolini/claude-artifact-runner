@@ -93,6 +93,7 @@ const ChampionshipManager = () => {
   const [activeTab, setActiveTab] = useState<'rankings' | 'new-match' | 'history' | 'tournaments' | 'seasons' | 'players' | 'storage'>('rankings');
   const [matchFilterPlayerId, setMatchFilterPlayerId] = useState<number | null>(null);
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null);
+  const [selectedTournamentId, setSelectedTournamentId] = useState<number | null>(null);
   const [isSeasonSaving, setIsSeasonSaving] = useState(false);
   const [isSeasonCreating, setIsSeasonCreating] = useState(false);
   const [isEloPreviewActive, setIsEloPreviewActive] = useState(false);
@@ -102,6 +103,37 @@ const ChampionshipManager = () => {
   const [isPlayerStatsModalOpen, setIsPlayerStatsModalOpen] = useState(false);
 
   const normalizeName = (name: string) => name.trim().toLowerCase();
+
+  // Deep links: restore tab / season / open tournament from the URL on load,
+  // and keep the URL in sync so a reload lands on the same view.
+  const VALID_TABS = ['rankings', 'new-match', 'history', 'tournaments', 'seasons', 'players', 'storage'] as const;
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab && (VALID_TABS as readonly string[]).includes(tab)) {
+      setActiveTab(tab as (typeof VALID_TABS)[number]);
+    }
+    const season = Number(params.get('season'));
+    if (Number.isFinite(season) && season > 0) {
+      setSelectedSeasonId(season);
+    }
+    const tournamentId = Number(params.get('tournament'));
+    if (Number.isFinite(tournamentId) && tournamentId > 0) {
+      setSelectedTournamentId(tournamentId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (activeTab !== 'rankings') params.set('tab', activeTab);
+    if (selectedSeasonId !== null) params.set('season', String(selectedSeasonId));
+    if (activeTab === 'tournaments' && selectedTournamentId !== null) {
+      params.set('tournament', String(selectedTournamentId));
+    }
+    const query = params.toString();
+    window.history.replaceState(null, '', query ? `?${query}` : window.location.pathname);
+  }, [activeTab, selectedSeasonId, selectedTournamentId]);
 
   const effectiveSeasonId = selectedSeasonId ?? currentSeasonId;
   const selectedSeasonMatches = useMemo(() => (
@@ -654,6 +686,8 @@ const ChampionshipManager = () => {
 
   const handleSelectSeason = (seasonId: number) => {
     setSelectedSeasonId(seasonId);
+    // An open tournament belongs to the previous season's list
+    setSelectedTournamentId(null);
   };
 
   const handleCreateSeason = async () => {
@@ -1015,6 +1049,8 @@ const ChampionshipManager = () => {
                 tournaments={seasonTournaments}
                 players={allTimePlayers}
                 matches={matches}
+                selectedTournamentId={selectedTournamentId}
+                onSelectTournament={setSelectedTournamentId}
                 canCreate={user?.role === 'superuser' && isViewingCurrentSeason}
                 canRecordResults={isViewingCurrentSeason}
                 canManage={user?.role === 'superuser'}
