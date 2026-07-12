@@ -54,11 +54,12 @@ export interface Season {
 
 export type TournamentFormat = 'single_elimination' | 'round_robin' | 'groups_knockout' | 'swiss';
 export type TournamentSeedingMode = 'random' | 'elo' | 'manual';
-export type TournamentPhase = 'round_robin' | 'group' | 'knockout' | 'swiss';
+export type TournamentPhase = 'round_robin' | 'group' | 'knockout' | 'swiss' | 'consolation';
 
 export type SlotSource =
   | { kind: 'player'; playerId: number }
   | { kind: 'winner'; slotId: string }
+  | { kind: 'loser'; slotId: string } // e.g. third-place match fed by semifinal losers
   | { kind: 'qualifier'; group: number; rank: number }
   | { kind: 'bye' };
 
@@ -84,6 +85,8 @@ export interface TournamentConfig {
   pointsWin: number;
   pointsDraw: number;
   pointsScheme?: TournamentPointsScheme;
+  thirdPlaceMatch?: boolean; // knockout phase: play a 3rd/4th place final
+  consolationBracket?: boolean; // groups_knockout: knockout bracket among non-qualifiers
 }
 
 export interface Tournament {

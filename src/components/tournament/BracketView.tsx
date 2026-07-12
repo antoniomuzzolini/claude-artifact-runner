@@ -6,6 +6,7 @@ import { ResolvedSlot, knockoutRoundLabel } from '../../utils/tournament';
 interface BracketViewProps {
   slots: ResolvedSlot[]; // knockout slots only
   getPlayerName: (playerId: number) => string;
+  roundLabel?: (round: number, totalRounds: number) => string;
 }
 
 const BracketSlotCard: React.FC<{
@@ -91,7 +92,7 @@ const RoundConnector: React.FC<{ matchesInNextRound: number }> = ({ matchesInNex
   </div>
 );
 
-const BracketView: React.FC<BracketViewProps> = ({ slots, getPlayerName }) => {
+const BracketView: React.FC<BracketViewProps> = ({ slots, getPlayerName, roundLabel }) => {
   const totalRounds = slots.reduce((max, slot) => Math.max(max, slot.round), 0);
   const rounds = Array.from({ length: totalRounds }, (_, index) =>
     slots
@@ -107,7 +108,7 @@ const BracketView: React.FC<BracketViewProps> = ({ slots, getPlayerName }) => {
             {roundIndex > 0 && <RoundConnector matchesInNextRound={roundSlots.length} />}
             <div className="flex flex-col w-52">
               <div className="h-4 mb-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-center">
-                {knockoutRoundLabel(roundIndex + 1, totalRounds)}
+                {roundLabel ? roundLabel(roundIndex + 1, totalRounds) : knockoutRoundLabel(roundIndex + 1, totalRounds)}
               </div>
               <div className="flex flex-col flex-1">
                 {roundSlots.map(slot => (

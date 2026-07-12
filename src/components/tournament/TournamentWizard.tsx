@@ -48,6 +48,8 @@ const TournamentWizard: React.FC<TournamentWizardProps> = ({ players, onCreate, 
   const [qualifiersPerGroup, setQualifiersPerGroup] = useState(2);
   const [swissRounds, setSwissRounds] = useState(3);
   const [pointsScheme, setPointsScheme] = useState<TournamentPointsScheme>('flat');
+  const [thirdPlaceMatch, setThirdPlaceMatch] = useState(false);
+  const [consolationBracket, setConsolationBracket] = useState(false);
 
   const sortedPlayers = useMemo(
     () => [...players].sort((a, b) => a.name.localeCompare(b.name)),
@@ -104,6 +106,17 @@ const TournamentWizard: React.FC<TournamentWizardProps> = ({ players, onCreate, 
     [players]
   );
 
+  // A 3rd place match needs semifinals: at least 3 bracket entrants
+  const knockoutEntrants = format === 'single_elimination'
+    ? participantCount
+    : (format === 'groups_knockout' ? groupCount * qualifiersPerGroup : 0);
+  const canHaveThirdPlace = knockoutEntrants >= 3;
+  // A consolation bracket needs at least 2 non-qualified players
+  const nonQualifiedCount = format === 'groups_knockout'
+    ? participantCount - groupCount * qualifiersPerGroup
+    : 0;
+  const canHaveConsolation = nonQualifiedCount >= 2;
+
   const handleCreate = () => {
     if (!format || participantCount < 2) return;
     const participantIds = seeding === 'manual' ? manualOrder : Array.from(selectedIds);
@@ -112,7 +125,9 @@ const TournamentWizard: React.FC<TournamentWizardProps> = ({ players, onCreate, 
       pointsDraw: 1,
       ...(format !== 'single_elimination' ? { pointsScheme } : {}),
       ...(format === 'groups_knockout' ? { groupCount, qualifiersPerGroup } : {}),
-      ...(format === 'swiss' ? { swissRounds } : {})
+      ...(format === 'swiss' ? { swissRounds } : {}),
+      ...(canHaveThirdPlace && thirdPlaceMatch ? { thirdPlaceMatch: true } : {}),
+      ...(canHaveConsolation && consolationBracket ? { consolationBracket: true } : {})
     };
     onCreate({
       name: name.trim() || 'Tournament',
@@ -374,6 +389,48 @@ const TournamentWizard: React.FC<TournamentWizardProps> = ({ players, onCreate, 
                   ))}
                 </select>
               </div>
+            </div>
+          )}
+
+          {(format === 'single_elimination' || format === 'groups_knockout') && (
+            <div className="space-y-2">
+              <label className={`flex items-center gap-2 text-sm ${
+                canHaveThirdPlace
+                  ? 'text-gray-700 dark:text-gray-300 cursor-pointer'
+                  : 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
+              }`}>
+                <input
+                  type="checkbox"
+                  checked={canHaveThirdPlace && thirdPlaceMatch}
+                  disabled={!canHaveThirdPlace}
+                  onChange={(e) => setThirdPlaceMatch(e.target.checked)}
+                  className="accent-blue-600"
+                />
+                <span>
+                  <strong>3rd place match</strong> — semifinal losers play for the bronze
+                  {!canHaveThirdPlace && ' (needs at least 3 players in the bracket)'}
+                </span>
+              </label>
+              {format === 'groups_knockout' && (
+                <label className={`flex items-center gap-2 text-sm ${
+                  canHaveConsolation
+                    ? 'text-gray-700 dark:text-gray-300 cursor-pointer'
+                    : 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                }`}>
+                  <input
+                    type="checkbox"
+                    checked={canHaveConsolation && consolationBracket}
+                    disabled={!canHaveConsolation}
+                    onChange={(e) => setConsolationBracket(e.target.checked)}
+                    className="accent-blue-600"
+                  />
+                  <span>
+                    <strong>Consolation bracket</strong> — knockout among the players who don&apos;t
+                    qualify from the groups
+                    {!canHaveConsolation && ' (needs at least 2 non-qualified players)'}
+                  </span>
+                </label>
+              )}
             </div>
           )}
 

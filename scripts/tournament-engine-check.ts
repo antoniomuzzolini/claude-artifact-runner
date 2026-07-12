@@ -2,6 +2,8 @@
    Run with: npx tsx scripts/tournament-engine-check.ts */
 import { Match, Tournament, TournamentConfig, TournamentFormat } from '../src/types/championship';
 import {
+  addConsolationBracket,
+  addThirdPlaceMatch,
   computeTournamentState,
   createTournamentSlots,
   generateNextSwissRound,
@@ -310,6 +312,116 @@ console.log('deleted match resets a slot to ready');
   const resolvedFinal = state.slots.find(slot => slot.id === finalSlot.id)!;
   check('final back to ready', resolvedFinal.status === 'ready');
   check('no champion anymore', state.championId === null);
+}
+
+// --- 3rd place match ----------------------------------------------------------
+console.log('3rd place match (4 players, single elimination)');
+{
+  const tournament = makeTournament('single_elimination', [1, 2, 3, 4], { thirdPlaceMatch: true });
+  const matches: Match[] = [];
+  check('4 slots (2 SF + final + 3rd place)', tournament.slots.length === 4);
+  const thirdSlot = tournament.slots.find(slot => slot.home.kind === 'loser')!;
+  check('3rd place fed by semifinal losers', (
+    thirdSlot !== undefined
+    && thirdSlot.home.kind === 'loser'
+    && thirdSlot.away.kind === 'loser'
+  ));
+  const beforeSemis = computeTournamentState(tournament, matches);
+  const unresolvedThird = beforeSemis.slots.find(slot => slot.id === thirdSlot.id)!;
+  check('placeholders show "Loser of SF1/SF2"', (
+    unresolvedThird.homePlaceholder === 'Loser of SF1'
+    && unresolvedThird.awayPlaceholder === 'Loser of SF2'
+  ));
+  const final = playOut(tournament, matches);
+  // lower id always wins: semis 1v4, 2v3 -> losers 4 and 3 -> 3 wins the bronze
+  const resolvedThird = final.slots.find(slot => slot.id === thirdSlot.id)!;
+  check('bronze won by best semifinal loser', resolvedThird.winnerPlayerId === 3);
+  check('champion still player 1', final.championId === 1);
+  check('completes only when 3rd place is played', final.isComplete);
+  check('4 matches played', final.playedMatches === 4);
+}
+
+console.log('3rd place match with a bye semifinal (3 players)');
+{
+  const tournament = makeTournament('single_elimination', [1, 2, 3], { thirdPlaceMatch: true });
+  const matches: Match[] = [];
+  const final = playOut(tournament, matches);
+  // SF1 is a bye for player 1 -> no loser; the SF2 loser takes the bronze
+  const thirdSlot = final.slots.find(slot => slot.home.kind === 'loser')!;
+  check('3rd place resolves as a bye', thirdSlot.status === 'bye');
+  check('SF2 loser takes the bronze without playing', thirdSlot.winnerPlayerId === 3);
+  check('completes', final.isComplete);
+}
+
+// --- consolation bracket --------------------------------------------------------
+console.log('consolation bracket (8 players, 2 groups, top 2)');
+{
+  const tournament = makeTournament('groups_knockout', [1, 2, 3, 4, 5, 6, 7, 8], {
+    groupCount: 2,
+    qualifiersPerGroup: 2,
+    consolationBracket: true
+  });
+  const matches: Match[] = [];
+  const consolationSlots = tournament.slots.filter(slot => slot.phase === 'consolation');
+  check('3 consolation slots (4 non-qualifiers)', consolationSlots.length === 3);
+  const beforeGroups = computeTournamentState(tournament, matches);
+  check('consolation pending before groups complete',
+    beforeGroups.slots.filter(s => s.phase === 'consolation').every(s => s.status === 'pending'));
+  const final = playOut(tournament, matches);
+  check('completes', final.isComplete);
+  check('main champion is player 1', final.championId === 1);
+  // snake groups: A=[1,4,5,8], B=[2,3,6,7]; lower id wins -> non-qualifiers 5,8,6,7
+  const consolationFinal = final.slots
+    .filter(slot => slot.phase === 'consolation')
+    .reduce((best, slot) => (slot.round > best.round ? slot : best));
+  check('consolation won by best non-qualifier (5)', consolationFinal.winnerPlayerId === 5);
+  const consolationPlayers = new Set(
+    final.slots
+      .filter(slot => slot.phase === 'consolation')
+      .flatMap(slot => [slot.homePlayerId, slot.awayPlayerId])
+      .filter((playerId): playerId is number => playerId !== null)
+  );
+  check('no qualifier plays in the consolation bracket',
+    [1, 2, 3, 4].every(playerId => !consolationPlayers.has(playerId)));
+}
+
+// --- late additions ---------------------------------------------------------------
+console.log('adding 3rd place / consolation to an existing tournament');
+{
+  const tournament = makeTournament('groups_knockout', [1, 2, 3, 4, 5, 6, 7, 8], {
+    groupCount: 2,
+    qualifiersPerGroup: 2
+  });
+  const matches: Match[] = [];
+  playOut(tournament, matches);
+
+  const withThird = addThirdPlaceMatch(tournament);
+  check('3rd place added to existing tournament', withThird !== null && withThird.length === tournament.slots.length + 1);
+  tournament.slots = withThird!;
+  check('adding 3rd place twice is a no-op', addThirdPlaceMatch(tournament) === null);
+
+  const withConsolation = addConsolationBracket(tournament);
+  check('consolation added to existing tournament', withConsolation !== null && withConsolation.length === tournament.slots.length + 3);
+  tournament.slots = withConsolation!;
+  check('adding consolation twice is a no-op', addConsolationBracket(tournament) === null);
+
+  // both become playable immediately (groups + semis already decided)
+  const state = computeTournamentState(tournament, matches);
+  const thirdSlot = state.slots.find(slot => slot.home.kind === 'loser')!;
+  check('late 3rd place is immediately ready', thirdSlot.status === 'ready');
+  const consolationReady = state.slots.filter(slot => slot.phase === 'consolation' && slot.round === 1);
+  check('late consolation round 1 is immediately ready', consolationReady.every(slot => slot.status === 'ready'));
+  check('tournament back to in-progress until extras are played', !state.isComplete);
+  const finished = playOut(tournament, matches);
+  check('completes again after extras are played', finished.isComplete);
+  check('champion unchanged', finished.championId === 1);
+}
+
+console.log('3rd place unavailable for a 2-player bracket');
+{
+  const tournament = makeTournament('single_elimination', [1, 2], { thirdPlaceMatch: true });
+  check('no 3rd place slot without semifinals', tournament.slots.every(slot => slot.home.kind !== 'loser'));
+  check('late add also refuses', addThirdPlaceMatch(tournament) === null);
 }
 
 console.log(failures === 0 ? '\nAll checks passed.' : `\n${failures} check(s) FAILED.`);

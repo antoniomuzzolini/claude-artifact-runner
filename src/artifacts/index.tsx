@@ -21,6 +21,8 @@ import {
 import { buildPlayerStats } from '../utils/playerStats';
 import {
   ResolvedSlot,
+  addConsolationBracket,
+  addThirdPlaceMatch,
   createTournamentSlots,
   generateNextSwissRound,
   orderParticipants,
@@ -311,7 +313,7 @@ const ChampionshipManager = () => {
       return;
     }
     if (slot.homePlayerId === null || slot.awayPlayerId === null) return;
-    const drawsForbidden = slot.phase === 'knockout' || tournament.config.pointsScheme === 'set_based';
+    const drawsForbidden = slot.phase === 'knockout' || slot.phase === 'consolation' || tournament.config.pointsScheme === 'set_based';
     if (drawsForbidden && homeScore === awayScore) {
       alert('Draws are not allowed in this match.');
       return;
@@ -391,7 +393,7 @@ const ChampionshipManager = () => {
       return;
     }
     if (slot.matchId === null || slot.homePlayerId === null || slot.awayPlayerId === null) return;
-    const drawsForbidden = slot.phase === 'knockout' || tournament.config.pointsScheme === 'set_based';
+    const drawsForbidden = slot.phase === 'knockout' || slot.phase === 'consolation' || tournament.config.pointsScheme === 'set_based';
     if (drawsForbidden && homeScore === awayScore) {
       alert('Draws are not allowed in this match.');
       return;
@@ -409,7 +411,7 @@ const ChampionshipManager = () => {
       }
     }
     if (slot.phase === 'group') {
-      const knockoutStarted = tournament.slots.some(item => item.phase === 'knockout' && item.matchId !== null);
+      const knockoutStarted = tournament.slots.some(item => (item.phase === 'knockout' || item.phase === 'consolation') && item.matchId !== null);
       if (knockoutStarted) {
         alert('This result is locked: the knockout stage has already started from these standings.');
         return;
@@ -472,6 +474,36 @@ const ChampionshipManager = () => {
     setTournaments(prev => prev.map(item => (
       item.id === tournament.id
         ? { ...item, slots: [...item.slots, ...newSlots] }
+        : item
+    )));
+  };
+
+  // Add a 3rd place match / consolation bracket to an existing tournament
+  // (for when the flag was forgotten in the creation wizard)
+  const handleAddThirdPlaceMatch = (tournament: Tournament) => {
+    if (!currentSeasonId || !isViewingCurrentSeason || tournament.season_id !== currentSeasonId) {
+      alert('You can only modify tournaments in the current season.');
+      return;
+    }
+    const newSlots = addThirdPlaceMatch(tournament);
+    if (!newSlots) return;
+    setTournaments(prev => prev.map(item => (
+      item.id === tournament.id
+        ? { ...item, config: { ...item.config, thirdPlaceMatch: true }, slots: newSlots }
+        : item
+    )));
+  };
+
+  const handleAddConsolationBracket = (tournament: Tournament) => {
+    if (!currentSeasonId || !isViewingCurrentSeason || tournament.season_id !== currentSeasonId) {
+      alert('You can only modify tournaments in the current season.');
+      return;
+    }
+    const newSlots = addConsolationBracket(tournament);
+    if (!newSlots) return;
+    setTournaments(prev => prev.map(item => (
+      item.id === tournament.id
+        ? { ...item, config: { ...item.config, consolationBracket: true }, slots: newSlots }
         : item
     )));
   };
@@ -991,6 +1023,8 @@ const ChampionshipManager = () => {
                 onUpdateResult={handleUpdateTournamentResult}
                 onGenerateNextRound={handleGenerateNextSwissRound}
                 onDeleteTournament={handleDeleteTournament}
+                onAddThirdPlaceMatch={handleAddThirdPlaceMatch}
+                onAddConsolationBracket={handleAddConsolationBracket}
                 onRefresh={refreshData}
               />
             )}

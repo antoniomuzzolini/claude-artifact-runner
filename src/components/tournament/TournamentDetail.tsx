@@ -27,6 +27,8 @@ interface TournamentDetailProps {
   onUpdateResult: (tournament: Tournament, slot: ResolvedSlot, homeScore: number, awayScore: number) => void;
   onGenerateNextRound: (tournament: Tournament) => void;
   onDelete: (tournament: Tournament) => void;
+  onAddThirdPlaceMatch: (tournament: Tournament) => void;
+  onAddConsolationBracket: (tournament: Tournament) => void;
   onRefresh: () => void;
   onBack: () => void;
 }
@@ -217,6 +219,8 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
   onUpdateResult,
   onGenerateNextRound,
   onDelete,
+  onAddThirdPlaceMatch,
+  onAddConsolationBracket,
   onRefresh,
   onBack
 }) => {
@@ -235,18 +239,31 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
   const groupSlots = state.slots.filter(slot => slot.phase === 'group');
   const roundRobinSlots = state.slots.filter(slot => slot.phase === 'round_robin');
   const swissSlots = state.slots.filter(slot => slot.phase === 'swiss');
+  const consolationSlots = state.slots.filter(slot => slot.phase === 'consolation');
+  // The 3rd place match (fed by semifinal losers) is drawn apart from the
+  // main bracket tree
+  const thirdPlaceSlot = knockoutSlots.find(slot => slot.home.kind === 'loser') ?? null;
+  const mainKnockoutSlots = thirdPlaceSlot
+    ? knockoutSlots.filter(slot => slot.id !== thirdPlaceSlot.id)
+    : knockoutSlots;
   const totalKnockoutRounds = knockoutSlots.reduce((max, slot) => Math.max(max, slot.round), 0);
   const groupCount = tournament.config.groupCount ?? 0;
   const totalPlayable = state.playedMatches + state.pendingMatches;
-  // Editing locks: group results freeze once the knockout stage has results
-  // (they determine the qualifiers); swiss results freeze once the next round
-  // is generated (they determine the pairings)
-  const hasKnockoutResults = knockoutSlots.some(slot => slot.matchId !== null);
+  // Editing locks: group results freeze once the knockout/consolation stage has
+  // results (they determine who advances where); swiss results freeze once the
+  // next round is generated (they determine the pairings)
+  const hasKnockoutResults = [...knockoutSlots, ...consolationSlots].some(slot => slot.matchId !== null);
   // Set-based scoring (volleyball) has no draws
   const allowDraws = (tournament.config.pointsScheme ?? 'flat') !== 'set_based';
 
   const hasStandings = tournament.format !== 'single_elimination';
   const hasBracket = tournament.format === 'single_elimination' || tournament.format === 'groups_knockout';
+  // Late additions for flags forgotten in the creation wizard
+  const canAddThirdPlace = canManage && hasBracket && !thirdPlaceSlot && totalKnockoutRounds >= 2;
+  const canAddConsolation = canManage
+    && tournament.format === 'groups_knockout'
+    && consolationSlots.length === 0
+    && tournament.participantIds.length - groupCount * (tournament.config.qualifiersPerGroup ?? 0) >= 2;
   const availableTabs = useMemo(() => {
     const tabs: { id: DetailTab; label: string }[] = [];
     if (hasStandings) {
@@ -274,14 +291,18 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
     };
 
     if (tournament.format === 'single_elimination' || tournament.format === 'groups_knockout') {
-      const finalSlot = knockoutSlots.find(slot => slot.round === totalKnockoutRounds && slot.position === 0);
+      const finalSlot = mainKnockoutSlots.find(slot => slot.round === totalKnockoutRounds && slot.position === 0);
       const second = finalSlot ? loserOf(finalSlot) : null;
-      const thirds = totalKnockoutRounds >= 2
-        ? knockoutSlots
-            .filter(slot => slot.round === totalKnockoutRounds - 1)
-            .map(loserOf)
-            .filter((playerId): playerId is number => playerId !== null)
-        : [];
+      // With a 3rd place match the bronze is decided on the pitch; otherwise
+      // both semifinal losers share it
+      const thirds = thirdPlaceSlot
+        ? (thirdPlaceSlot.winnerPlayerId !== null ? [thirdPlaceSlot.winnerPlayerId] : [])
+        : (totalKnockoutRounds >= 2
+            ? mainKnockoutSlots
+                .filter(slot => slot.round === totalKnockoutRounds - 1)
+                .map(loserOf)
+                .filter((playerId): playerId is number => playerId !== null)
+            : []);
       return { first: state.championId, second, thirds };
     }
 
@@ -291,7 +312,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
       second: rows[1]?.playerId ?? null,
       thirds: rows[2] ? [rows[2].playerId] : []
     };
-  }, [state, tournament.format, knockoutSlots, totalKnockoutRounds]);
+  }, [state, tournament.format, mainKnockoutSlots, thirdPlaceSlot, totalKnockoutRounds]);
 
   const handleRecord = (slot: ResolvedSlot, homeScore: number, awayScore: number) => {
     onRecordResult(tournament, slot, homeScore, awayScore);
@@ -325,13 +346,38 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
   ) : null;
 
   const bracketView = (
-    <div>
-      {tournament.format === 'groups_knockout' && !state.isGroupPhaseComplete && (
-        <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
-          The bracket fills in as group matches are completed.
-        </p>
+    <div className="space-y-8">
+      <div>
+        {tournament.format === 'groups_knockout' && !state.isGroupPhaseComplete && (
+          <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+            The bracket fills in as group matches are completed.
+          </p>
+        )}
+        <BracketView slots={mainKnockoutSlots} getPlayerName={getPlayerName} />
+      </div>
+      {thirdPlaceSlot && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">
+            3rd Place Match
+          </h3>
+          <BracketView
+            slots={[{ ...thirdPlaceSlot, round: 1, position: 0 }]}
+            getPlayerName={getPlayerName}
+            roundLabel={() => '3rd Place'}
+          />
+        </div>
       )}
-      <BracketView slots={knockoutSlots} getPlayerName={getPlayerName} />
+      {consolationSlots.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">
+            Consolation Bracket
+            <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
+              (players not qualified from the groups)
+            </span>
+          </h3>
+          <BracketView slots={consolationSlots} getPlayerName={getPlayerName} />
+        </div>
+      )}
     </div>
   );
 
@@ -454,15 +500,28 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
       {activeTab === 'scores' && (
         <div className="space-y-8 max-w-3xl">
           {tournament.format === 'single_elimination' && (
-            <RoundsList
-              slots={knockoutSlots.filter(slot => slot.status !== 'bye')}
-              getPlayerName={getPlayerName}
-              allowDraw={false}
-              canRecordResults={canRecordResults}
-              roundLabel={(round) => knockoutRoundLabel(round, totalKnockoutRounds)}
-              onRecordResult={handleRecord}
-              onUpdateResult={handleUpdate}
-            />
+            <>
+              <RoundsList
+                slots={mainKnockoutSlots.filter(slot => slot.status !== 'bye')}
+                getPlayerName={getPlayerName}
+                allowDraw={false}
+                canRecordResults={canRecordResults}
+                roundLabel={(round) => knockoutRoundLabel(round, totalKnockoutRounds)}
+                onRecordResult={handleRecord}
+                onUpdateResult={handleUpdate}
+              />
+              {thirdPlaceSlot && thirdPlaceSlot.status !== 'bye' && (
+                <RoundsList
+                  slots={[thirdPlaceSlot]}
+                  getPlayerName={getPlayerName}
+                  allowDraw={false}
+                  canRecordResults={canRecordResults}
+                  roundLabel={() => '3rd Place Match'}
+                  onRecordResult={handleRecord}
+                  onUpdateResult={handleUpdate}
+                />
+              )}
+            </>
           )}
 
           {tournament.format === 'round_robin' && (
@@ -504,7 +563,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
                   )}
                 </h3>
                 <RoundsList
-                  slots={knockoutSlots.filter(slot => slot.status !== 'bye')}
+                  slots={mainKnockoutSlots.filter(slot => slot.status !== 'bye')}
                   getPlayerName={getPlayerName}
                   allowDraw={false}
                   canRecordResults={canRecordResults}
@@ -513,6 +572,43 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
                   onUpdateResult={handleUpdate}
                 />
               </div>
+              {thirdPlaceSlot && thirdPlaceSlot.status !== 'bye' && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">
+                    3rd Place Match
+                  </h3>
+                  <RoundsList
+                    slots={[thirdPlaceSlot]}
+                    getPlayerName={getPlayerName}
+                    allowDraw={false}
+                    canRecordResults={canRecordResults}
+                    roundLabel={() => '3rd Place Match'}
+                    onRecordResult={handleRecord}
+                    onUpdateResult={handleUpdate}
+                  />
+                </div>
+              )}
+              {consolationSlots.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">
+                    Consolation Bracket
+                    {!state.isGroupPhaseComplete && (
+                      <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
+                        (unlocks when all group matches are played)
+                      </span>
+                    )}
+                  </h3>
+                  <RoundsList
+                    slots={consolationSlots.filter(slot => slot.status !== 'bye')}
+                    getPlayerName={getPlayerName}
+                    allowDraw={false}
+                    canRecordResults={canRecordResults}
+                    roundLabel={(round) => `Consolation · Round ${round}`}
+                    onRecordResult={handleRecord}
+                    onUpdateResult={handleUpdate}
+                  />
+                </div>
+              )}
             </>
           )}
 
@@ -536,6 +632,32 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
                 onRecordResult={handleRecord}
                 onUpdateResult={handleUpdate}
               />
+            </div>
+          )}
+
+          {/* Late additions for flags forgotten in the creation wizard */}
+          {(canAddThirdPlace || canAddConsolation) && (
+            <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-100 dark:border-gray-700/60">
+              {canAddThirdPlace && (
+                <button
+                  onClick={() => onAddThirdPlaceMatch(tournament)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-200"
+                  title="Add a 3rd/4th place final between the semifinal losers"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  Add 3rd place match
+                </button>
+              )}
+              {canAddConsolation && (
+                <button
+                  onClick={() => onAddConsolationBracket(tournament)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-200"
+                  title="Add a knockout bracket among the players not qualified from the groups"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  Add consolation bracket
+                </button>
+              )}
             </div>
           )}
         </div>

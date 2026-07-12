@@ -155,7 +155,8 @@ const bracketSeedOrder = (size: number): number[] => {
 
 const buildKnockoutSlots = (
   sources: SlotSource[],
-  idPrefix: string
+  idPrefix: string,
+  phase: 'knockout' | 'consolation' = 'knockout'
 ): TournamentSlot[] => {
   const entrants = sources.length;
   if (entrants < 2) return [];
@@ -169,7 +170,7 @@ const buildKnockoutSlots = (
     const awaySeed = seedOrder[position * 2 + 1];
     slots.push({
       id: `${idPrefix}-r1-${position}`,
-      phase: 'knockout',
+      phase,
       round: 1,
       position,
       home: homeSeed <= entrants ? sources[homeSeed - 1] : { kind: 'bye' },
@@ -183,7 +184,7 @@ const buildKnockoutSlots = (
     for (let position = 0; position < matchesInRound; position += 1) {
       slots.push({
         id: `${idPrefix}-r${round}-${position}`,
-        phase: 'knockout',
+        phase,
         round,
         position,
         home: { kind: 'winner', slotId: `${idPrefix}-r${round - 1}-${position * 2}` },
@@ -194,6 +195,74 @@ const buildKnockoutSlots = (
   }
 
   return slots;
+};
+
+// Optional 3rd/4th place final: semifinal losers meet, same round as the final
+// (position 1, so the final keeps position 0 for champion detection)
+const appendThirdPlaceSlot = (
+  knockoutSlots: TournamentSlot[],
+  idPrefix: string
+): TournamentSlot[] => {
+  const totalRounds = knockoutSlots.reduce((max, slot) => Math.max(max, slot.round), 0);
+  if (totalRounds < 2) return knockoutSlots; // no semifinals -> nothing to play
+  return [
+    ...knockoutSlots,
+    {
+      id: `${idPrefix}-3rd`,
+      phase: 'knockout',
+      round: totalRounds,
+      position: 1,
+      home: { kind: 'loser', slotId: `${idPrefix}-r${totalRounds - 1}-0` },
+      away: { kind: 'loser', slotId: `${idPrefix}-r${totalRounds - 1}-1` },
+      matchId: null
+    }
+  ];
+};
+
+// Consolation bracket: knockout among the non-qualifiers, seeded by group rank
+// (all third-ranked first, then fourth-ranked, ...). Groups can be uneven, so
+// only ranks that actually exist in a group are included.
+const buildConsolationSlots = (
+  groups: number[][],
+  qualifiersPerGroup: number
+): TournamentSlot[] => {
+  const maxGroupSize = groups.reduce((max, groupIds) => Math.max(max, groupIds.length), 0);
+  const sources: SlotSource[] = [];
+  for (let rank = qualifiersPerGroup; rank < maxGroupSize; rank += 1) {
+    for (let group = 0; group < groups.length; group += 1) {
+      if (rank < groups[group].length) {
+        sources.push({ kind: 'qualifier', group, rank });
+      }
+    }
+  }
+  return buildKnockoutSlots(sources, 'co', 'consolation');
+};
+
+// Add a 3rd place match to an existing tournament (forgotten at creation).
+// Returns the new slots array, or null when not applicable / already present.
+export const addThirdPlaceMatch = (tournament: Tournament): TournamentSlot[] | null => {
+  if (tournament.format !== 'single_elimination' && tournament.format !== 'groups_knockout') return null;
+  const knockoutSlots = tournament.slots.filter(slot => slot.phase === 'knockout');
+  if (knockoutSlots.some(slot => slot.home.kind === 'loser')) return null; // already there
+  const withThirdPlace = appendThirdPlaceSlot(knockoutSlots, 'ko');
+  if (withThirdPlace === knockoutSlots) return null; // no semifinals
+  return [...tournament.slots, withThirdPlace[withThirdPlace.length - 1]];
+};
+
+// Add a consolation bracket to an existing groups+knockout tournament.
+// Returns the new slots array, or null when not applicable / already present.
+export const addConsolationBracket = (tournament: Tournament): TournamentSlot[] | null => {
+  if (tournament.format !== 'groups_knockout') return null;
+  if (tournament.slots.some(slot => slot.phase === 'consolation')) return null;
+  const groupCount = tournament.config.groupCount ?? 0;
+  const qualifiersPerGroup = tournament.config.qualifiersPerGroup ?? 2;
+  if (groupCount < 1) return null;
+  // participantIds are stored in seed order: this rebuilds the exact same
+  // group distribution used at creation time
+  const groups = distributeIntoGroups(tournament.participantIds, groupCount);
+  const consolationSlots = buildConsolationSlots(groups, qualifiersPerGroup);
+  if (consolationSlots.length === 0) return null;
+  return [...tournament.slots, ...consolationSlots];
 };
 
 // Circle method pairings; a null entry marks the resting player on odd counts
@@ -293,11 +362,13 @@ export const createTournamentSlots = (
   config: TournamentConfig
 ): TournamentSlot[] => {
   switch (format) {
-    case 'single_elimination':
-      return buildKnockoutSlots(
+    case 'single_elimination': {
+      const knockoutSlots = buildKnockoutSlots(
         seededIds.map(playerId => ({ kind: 'player', playerId } as SlotSource)),
         'ko'
       );
+      return config.thirdPlaceMatch ? appendThirdPlaceSlot(knockoutSlots, 'ko') : knockoutSlots;
+    }
     case 'round_robin':
       return buildRoundRobinSlots(seededIds, 'round_robin', 'rr');
     case 'groups_knockout': {
@@ -318,7 +389,16 @@ export const createTournamentSlots = (
         }
       }
 
-      return [...groupSlots, ...buildKnockoutSlots(qualifierSources, 'ko')];
+      let knockoutSlots = buildKnockoutSlots(qualifierSources, 'ko');
+      if (config.thirdPlaceMatch) {
+        knockoutSlots = appendThirdPlaceSlot(knockoutSlots, 'ko');
+      }
+
+      const consolationSlots = config.consolationBracket
+        ? buildConsolationSlots(groups, qualifiersPerGroup)
+        : [];
+
+      return [...groupSlots, ...knockoutSlots, ...consolationSlots];
     }
     case 'swiss': {
       // Round 1: top half vs bottom half by seed; odd player count -> last seed rests
@@ -523,10 +603,13 @@ export const computeTournamentState = (
     .reduce((max, slot) => Math.max(max, slot.round), 0);
 
   const placeholderFor = (source: SlotSource): string | null => {
-    if (source.kind === 'winner') {
+    if (source.kind === 'winner' || source.kind === 'loser') {
       const feeder = slotById.get(source.slotId);
       if (!feeder) return null;
-      return `Winner of ${knockoutSlotShortLabel(feeder.round, totalKnockoutRounds, feeder.position)}`;
+      const label = feeder.phase === 'consolation'
+        ? `R${feeder.round} M${feeder.position + 1}`
+        : knockoutSlotShortLabel(feeder.round, totalKnockoutRounds, feeder.position);
+      return `${source.kind === 'winner' ? 'Winner' : 'Loser'} of ${label}`;
     }
     if (source.kind === 'qualifier') {
       return `${ordinal(source.rank + 1)} Group ${groupLetter(source.group)}`;
@@ -534,8 +617,11 @@ export const computeTournamentState = (
     return null;
   };
 
+  const isBracketPhase = (slot: TournamentSlot) =>
+    slot.phase === 'knockout' || slot.phase === 'consolation';
+
   const orderedSlots = [...tournament.slots].sort((a, b) => {
-    const phaseRank = (slot: TournamentSlot) => (slot.phase === 'knockout' ? 1 : 0);
+    const phaseRank = (slot: TournamentSlot) => (isBracketPhase(slot) ? 1 : 0);
     return phaseRank(a) - phaseRank(b) || a.round - b.round || a.position - b.position;
   });
 
@@ -552,6 +638,17 @@ export const computeTournamentState = (
       case 'winner': {
         const feeder = resolvedById.get(source.slotId);
         return { playerId: feeder?.winnerPlayerId ?? null, isBye: false };
+      }
+      case 'loser': {
+        const feeder = resolvedById.get(source.slotId);
+        if (!feeder) return { playerId: null, isBye: false };
+        // A bye feeder has no loser: this side of the 3rd place match is a bye
+        if (feeder.status === 'bye') return { playerId: null, isBye: true };
+        if (feeder.winnerPlayerId === null) return { playerId: null, isBye: false };
+        const loserId = feeder.winnerPlayerId === feeder.homePlayerId
+          ? feeder.awayPlayerId
+          : feeder.homePlayerId;
+        return { playerId: loserId, isBye: false };
       }
       case 'qualifier': {
         if (!isGroupPhaseComplete) return { playerId: null, isBye: false };
@@ -604,14 +701,14 @@ export const computeTournamentState = (
     };
   };
 
-  // First pass: non-knockout phases (their sources are always direct players)
+  // First pass: non-bracket phases (their sources are always direct players)
   for (const slot of orderedSlots) {
-    if (slot.phase === 'knockout') continue;
+    if (isBracketPhase(slot)) continue;
     resolvedById.set(slot.id, resolveSlot(slot));
   }
 
   const nonKnockoutResolved = orderedSlots
-    .filter(slot => slot.phase !== 'knockout')
+    .filter(slot => !isBracketPhase(slot))
     .map(slot => resolvedById.get(slot.id)!);
 
   if (tournament.format === 'groups_knockout' && groupCount > 0) {
@@ -627,9 +724,10 @@ export const computeTournamentState = (
       .every(slot => slot.status === 'done');
   }
 
-  // Second pass: knockout slots in round order (winner/qualifier sources)
+  // Second pass: bracket slots (knockout + consolation) in round order
+  // (winner/loser/qualifier sources; feeders always sit in earlier rounds)
   for (const slot of orderedSlots) {
-    if (slot.phase !== 'knockout') continue;
+    if (!isBracketPhase(slot)) continue;
     resolvedById.set(slot.id, resolveSlot(slot));
   }
 
@@ -660,7 +758,8 @@ export const computeTournamentState = (
     const finalRound = knockoutSlots.reduce((max, slot) => Math.max(max, slot.round), 0);
     const finalSlot = knockoutSlots.find(slot => slot.round === finalRound && slot.position === 0);
     championId = finalSlot?.winnerPlayerId ?? null;
-    isComplete = championId !== null;
+    // Optional extras (3rd place match, consolation bracket) must also finish
+    isComplete = championId !== null && pendingMatches === 0;
   } else if (tournament.format === 'round_robin') {
     isComplete = slots.every(slot => slot.status === 'done' || slot.status === 'bye');
     championId = isComplete && standings && standings.length > 0 ? standings[0].playerId : null;
@@ -774,10 +873,12 @@ export const ordinal = (n: number): string => {
 
 export const groupLetter = (groupIndex: number): string => String.fromCharCode(65 + groupIndex);
 
-// Short label for a single knockout slot: "Final", "SF1", "QF2", "R1 M3"
+// Short label for a single knockout slot: "Final", "SF1", "QF2", "R1 M3".
+// In the final round only position 0 is the final; position 1 is the
+// optional 3rd place match.
 export const knockoutSlotShortLabel = (round: number, totalRounds: number, position: number): string => {
   const fromEnd = totalRounds - round;
-  if (fromEnd === 0) return 'Final';
+  if (fromEnd === 0) return position === 0 ? 'Final' : '3rd Place';
   if (fromEnd === 1) return `SF${position + 1}`;
   if (fromEnd === 2) return `QF${position + 1}`;
   return `R${round} M${position + 1}`;
@@ -789,6 +890,9 @@ export const slotContextLabel = (slot: TournamentSlot, totalKnockoutRounds: numb
     const fromEnd = totalKnockoutRounds - slot.round;
     if (fromEnd <= 2) return knockoutSlotShortLabel(slot.round, totalKnockoutRounds, slot.position);
     return `Round ${slot.round} · Match ${slot.position + 1}`;
+  }
+  if (slot.phase === 'consolation') {
+    return `Consolation · Round ${slot.round}`;
   }
   if (slot.phase === 'group' && slot.group !== undefined) {
     return `Group ${groupLetter(slot.group)} · Round ${slot.round}`;
