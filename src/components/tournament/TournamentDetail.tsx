@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from 'react';
-import { ArrowLeft, Crown, LifeBuoy, Lock, Pencil, PlusCircle, Trash2, Trophy } from 'lucide-react';
+import { ArrowLeft, Crown, Lock, Pencil, PlusCircle, Trash2, Trophy } from 'lucide-react';
 import { Match, Player, Tournament } from '../../types/championship';
 import {
   ResolvedSlot,
@@ -27,7 +27,6 @@ interface TournamentDetailProps {
   onUpdateResult: (tournament: Tournament, slot: ResolvedSlot, homeScore: number, awayScore: number) => void;
   onGenerateNextRound: (tournament: Tournament) => void;
   onDelete: (tournament: Tournament) => void;
-  onRecoverResults: (tournament: Tournament) => void;
   onRefresh: () => void;
   onBack: () => void;
 }
@@ -218,7 +217,6 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
   onUpdateResult,
   onGenerateNextRound,
   onDelete,
-  onRecoverResults,
   onRefresh,
   onBack
 }) => {
@@ -369,16 +367,6 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
           <LiveToggle isLive={isAutoRefreshOn} onToggle={() => setIsAutoRefreshOn(prev => !prev)} />
           {activeTab !== 'scores' && (
             <FullscreenButton onClick={() => setIsFullscreen(true)} />
-          )}
-          {canManage && state.slots.some(slot => slot.status === 'ready') && (
-            <button
-              onClick={() => onRecoverResults(tournament)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-200"
-              title="Relink results from the season's match history (recovery after lost links)"
-            >
-              <LifeBuoy className="w-4 h-4" />
-              Recover results
-            </button>
           )}
           {canManage && (
             <button
