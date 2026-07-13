@@ -8,7 +8,8 @@ import {
   formatLabel,
   getSideName,
   groupLetter,
-  knockoutRoundLabel
+  knockoutRoundLabel,
+  ordinal
 } from '../../../utils/tournament';
 
 // Public, read-only tournament board for shared screens (TVs, projectors,
@@ -204,13 +205,15 @@ const BracketColumns = ({
   playerNameById,
   slots,
   totalRounds,
-  thirdPlaceSlot
+  thirdPlaceSlot,
+  finalLabel
 }: {
   tournament: Tournament;
   playerNameById: Map<number, string>;
   slots: ResolvedSlot[];
   totalRounds: number;
   thirdPlaceSlot?: ResolvedSlot | null;
+  finalLabel?: string; // which place the last round is played for
 }) => (
   <table className="bracket">
     <tbody>
@@ -224,7 +227,7 @@ const BracketColumns = ({
           return (
             <td key={round} className="bcol" style={{ width: `${100 / totalRounds}%` }}>
               <div className="btitle">
-                {knockoutRoundLabel(round, totalRounds)}
+                {isFinalColumn && finalLabel ? finalLabel : knockoutRoundLabel(round, totalRounds)}
               </div>
               {roundSlots.map(slot => (
                 <MatchCard key={slot.id} tournament={tournament} playerNameById={playerNameById} slot={slot} />
@@ -335,6 +338,16 @@ export default async function PublicTournamentPage({
 
   const scaleClass = totalKnockoutRounds >= 4 || groupCount > 4 || maxGroupRows > 6 ? 'dense' : '';
 
+  // Column titles say which place each deciding match is played for (like the
+  // 3rd place match): main final -> 1st, consolation final -> first place
+  // after all the knockout qualifiers
+  const qualifiedForKnockout = tournament.format === 'groups_knockout'
+    ? (tournament.config.qualifiersPerGroup ?? 2) * groupCount
+    : 0;
+  const consolationFinalLabel = qualifiedForKnockout > 0
+    ? `${ordinal(qualifiedForKnockout + 1)} Place`
+    : undefined;
+
   return (
     <div className={`board view-${activeView} ${scaleClass}`}>
       {/* Works on browsers too old for the main app; reloads the whole page */}
@@ -442,6 +455,7 @@ export default async function PublicTournamentPage({
           slots={mainKnockoutSlots}
           totalRounds={totalKnockoutRounds}
           thirdPlaceSlot={thirdPlaceSlot}
+          finalLabel="1st Place"
         />
       )}
 
@@ -451,6 +465,7 @@ export default async function PublicTournamentPage({
           playerNameById={playerNameById}
           slots={consolationSlots}
           totalRounds={totalConsolationRounds}
+          finalLabel={consolationFinalLabel}
         />
       )}
 

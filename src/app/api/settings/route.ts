@@ -127,6 +127,11 @@ export async function POST(req: NextRequest) {
     const { currentUser, error } = getCurrentUser(req);
     if (error) return error;
 
+    // The Settings tab is admin-only in the UI; enforce it server-side too
+    if (currentUser.role !== 'superuser') {
+      return jsonResponse({ error: 'Only administrators can update settings' }, 403);
+    }
+
     await ensureSettingsTable();
 
     const body = await req.json().catch(() => ({}));
