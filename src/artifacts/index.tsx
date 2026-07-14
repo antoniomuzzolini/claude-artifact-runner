@@ -43,6 +43,7 @@ import { TournamentDraft } from '../components/tournament/TournamentWizard';
 import UserMenu from '../components/auth/UserMenu';
 import AuthWrapper from '../components/auth/AuthWrapper';
 import PlayerStatsModal from '../components/PlayerStatsModal';
+import MatchRecapModal, { MatchRecapData } from '../components/MatchRecapModal';
 
 const ChampionshipManager = () => {
   // Initialize theme early
@@ -104,6 +105,9 @@ const ChampionshipManager = () => {
   const [selectedPlayerForStats, setSelectedPlayerForStats] = useState<Player | null>(null);
   const [isPlayerStatsModalOpen, setIsPlayerStatsModalOpen] = useState(false);
 
+  // Recap popup shown right after saving a match
+  const [matchRecap, setMatchRecap] = useState<MatchRecapData | null>(null);
+
   const normalizeName = (name: string) => name.trim().toLowerCase();
 
   // Deep links: restore tab / season / open tournament from the URL on load,
@@ -153,6 +157,53 @@ const ChampionshipManager = () => {
   const allTimePlayers = useMemo(() => (
     buildPlayerStats(players, matches, null)
   ), [players, matches]);
+
+  // Usual match shape (teams x players) from the most recent matches, used to
+  // prefill the New Match form (e.g. 2 teams of 2 for a 2v2 office league)
+  const suggestedMatchShape = useMemo(() => {
+    const source = selectedSeasonMatches.length > 0 ? selectedSeasonMatches : matches;
+    const shapeCounts = new Map<string, number>();
+    // matches are ordered newest first
+    source.slice(0, 10).forEach(match => {
+      if (!Array.isArray(match.teams) || match.teams.length < 2) return;
+      const teamCount = match.teams.length;
+      const totalPlayers = match.teams.reduce((sum, team) => sum + team.length, 0);
+      const teamSize = Math.max(1, Math.round(totalPlayers / teamCount));
+      const key = `${teamCount}x${teamSize}`;
+      shapeCounts.set(key, (shapeCounts.get(key) ?? 0) + 1);
+    });
+    let best = '2x1';
+    let bestCount = 0;
+    shapeCounts.forEach((count, key) => {
+      if (count > bestCount) {
+        best = key;
+        bestCount = count;
+      }
+    });
+    const [teamCount, teamSize] = best.split('x').map(Number);
+    return { teamCount, teamSize };
+  }, [selectedSeasonMatches, matches]);
+
+  const emptyMatchForShape = (teamCount: number, teamSize: number): NewMatch => ({
+    teams: Array.from({ length: teamCount }, () => Array.from({ length: teamSize }, () => '')),
+    scores: Array.from({ length: teamCount }, () => 0)
+  });
+
+  // Prefill only while the form is untouched (no names typed): once data
+  // loads, the empty 2x1 default becomes the org's usual shape
+  useEffect(() => {
+    setNewMatch(prev => {
+      const untouched = prev.teams.every(team => team.every(name => name === ''))
+        && prev.scores.every(score => score === 0);
+      if (!untouched) return prev;
+      const { teamCount, teamSize } = suggestedMatchShape;
+      if (prev.teams.length === teamCount && prev.teams.every(team => team.length === teamSize)) {
+        return prev;
+      }
+      return emptyMatchForShape(teamCount, teamSize);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suggestedMatchShape]);
 
   // "Tournament name · round" label for each match linked to a tournament slot
   const tournamentLabelByMatchId = useMemo(() => {
@@ -286,13 +337,25 @@ const ChampionshipManager = () => {
 
     setMatches(prev => [match, ...prev]);
 
-    // Reset form
-    setNewMatch({
-      teams: [[''], ['']],
-      scores: [0, 0]
-    });
+    // Reset form keeping the shape just used (likely the next match too)
+    setNewMatch(emptyMatchForShape(
+      teamsPlayers.length,
+      Math.max(1, ...teamsPlayers.map(team => team.length))
+    ));
 
-    alert('Match added successfully!');
+    // Recap popup: what was recorded and how each player's ELO moved
+    setMatchRecap({
+      teams: teamsPlayers.map((team, index) => ({
+        names: team.map(player => player.name),
+        score: newMatch.scores[index],
+        isWinner: winnerIndex === index
+      })),
+      isDraw: winnerIndex === null,
+      players: teamsPlayers.flat().map(player => {
+        const delta = eloChanges[String(player.id)] ?? 0;
+        return { name: player.name, delta, newElo: player.elo + delta };
+      })
+    });
   };
 
   // Create a tournament (structure only; matches are created as results come in)
@@ -1193,6 +1256,11 @@ const ChampionshipManager = () => {
           isOpen={isPlayerStatsModalOpen}
           onClose={closePlayerStatsModal}
         />
+
+        {/* Post-save match recap */}
+        {matchRecap && (
+          <MatchRecapModal recap={matchRecap} onClose={() => setMatchRecap(null)} />
+        )}
       </div>
     </div>
   );
