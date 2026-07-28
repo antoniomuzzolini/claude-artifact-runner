@@ -31,6 +31,8 @@ interface TournamentDetailProps {
   onDelete: (tournament: Tournament) => void;
   onAddThirdPlaceMatch: (tournament: Tournament) => void;
   onAddConsolationBracket: (tournament: Tournament) => void;
+  onRemoveThirdPlaceMatch: (tournament: Tournament) => void;
+  onRemoveConsolationBracket: (tournament: Tournament) => void;
   onGenerateShareLink: (tournament: Tournament) => Promise<string | null>;
   onRenameTournament: (tournament: Tournament, name: string) => void;
   onRenameTeam: (tournament: Tournament, teamId: number, name: string) => void;
@@ -39,7 +41,7 @@ interface TournamentDetailProps {
   onBack: () => void;
 }
 
-type DetailTab = 'standings' | 'bracket' | 'scores';
+type DetailTab = 'standings' | 'bracket' | 'scores' | 'teams';
 
 const sideName = (
   playerId: number | null,
@@ -286,6 +288,8 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
   onDelete,
   onAddThirdPlaceMatch,
   onAddConsolationBracket,
+  onRemoveThirdPlaceMatch,
+  onRemoveConsolationBracket,
   onGenerateShareLink,
   onRenameTournament,
   onRenameTeam,
@@ -346,6 +350,8 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
 
   // Late additions for flags forgotten in the creation wizard
   const canAddThirdPlace = canManage && hasBracket && !thirdPlaceSlot && totalKnockoutRounds >= 2;
+  const canRemoveThirdPlace = canManage && !!thirdPlaceSlot;
+  const canRemoveConsolation = canManage && consolationSlots.length > 0;
   const canAddConsolation = canManage
     && tournament.format === 'groups_knockout'
     && consolationSlots.length === 0
@@ -357,8 +363,9 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
     }
     if (hasBracket) tabs.push({ id: 'bracket', label: 'Bracket' });
     tabs.push({ id: 'scores', label: 'Scores' });
+    if ((tournament.teams?.length ?? 0) > 0) tabs.push({ id: 'teams', label: 'Teams' });
     return tabs;
-  }, [hasStandings, hasBracket, tournament.format]);
+  }, [hasStandings, hasBracket, tournament.format, tournament.teams]);
 
   const [activeTab, setActiveTab] = useState<DetailTab>(availableTabs[0].id);
   const [isAutoRefreshOn, setIsAutoRefreshOn] = useState(false);
@@ -823,27 +830,47 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
             </div>
           )}
 
-          {/* Late additions for flags forgotten in the creation wizard */}
-          {(canAddThirdPlace || canAddConsolation) && (
+          {/* Optional sections can be added or removed while the tournament runs */}
+          {(canAddThirdPlace || canAddConsolation || canRemoveThirdPlace || canRemoveConsolation) && (
             <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-100 dark:border-gray-700/60">
               {canAddThirdPlace && (
                 <button
                   onClick={() => onAddThirdPlaceMatch(tournament)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-200"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm whitespace-nowrap text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-200"
                   title="Add a 3rd/4th place final between the semifinal losers"
                 >
                   <PlusCircle className="w-4 h-4" />
                   Add 3rd place match
                 </button>
               )}
+              {canRemoveThirdPlace && (
+                <button
+                  onClick={() => onRemoveThirdPlaceMatch(tournament)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm whitespace-nowrap text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors duration-200"
+                  title="Remove the 3rd/4th place final"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Remove 3rd place match
+                </button>
+              )}
               {canAddConsolation && (
                 <button
                   onClick={() => onAddConsolationBracket(tournament)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-200"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm whitespace-nowrap text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-200"
                   title="Add a knockout bracket among the players not qualified from the groups"
                 >
                   <PlusCircle className="w-4 h-4" />
                   Add consolation bracket
+                </button>
+              )}
+              {canRemoveConsolation && (
+                <button
+                  onClick={() => onRemoveConsolationBracket(tournament)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm whitespace-nowrap text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors duration-200"
+                  title="Remove the consolation bracket"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Remove consolation bracket
                 </button>
               )}
             </div>
@@ -851,16 +878,21 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
         </div>
       )}
 
-      {/* Rosters (team tournaments): who plays in which team */}
-      {(tournament.teams?.length ?? 0) > 0 && (
+      {/* Rosters tab (team tournaments): who plays in which team */}
+      {activeTab === 'teams' && (tournament.teams?.length ?? 0) > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">Teams</h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            {tournament.teams!.length} teams
+            {tournament.config.teamSize ? ` · ${tournament.config.teamSize} players each (minimum)` : ''}
+            {canManage ? ' · click a name to rename it' : ''}
+          </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {tournament.teams!.map(team => (
+            {tournament.teams!.map((team, index) => (
               <div
                 key={team.id}
                 className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3"
               >
+                <div className="text-xs text-gray-400 dark:text-gray-500 mb-0.5">Seed #{index + 1}</div>
                 {canManage ? (
                   <InlineRename
                     value={team.name}
@@ -874,9 +906,17 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
                     {team.name}
                   </div>
                 )}
-                <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {team.playerIds.map(playerId => getPlayerName(playerId)).join(', ')}
-                </div>
+                <ul className="mt-1.5 space-y-0.5">
+                  {team.playerIds.map((playerId, memberIndex) => (
+                    <li key={playerId} className="text-xs text-gray-600 dark:text-gray-400 truncate">
+                      {getPlayerName(playerId)}
+                      {tournament.config.teamSize !== undefined
+                        && memberIndex >= tournament.config.teamSize && (
+                        <span className="ml-1.5 text-amber-600 dark:text-amber-400">reserve</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               </div>
             ))}
           </div>

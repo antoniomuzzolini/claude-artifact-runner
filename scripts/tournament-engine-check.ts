@@ -7,7 +7,10 @@ import {
   buildBalancedTeamGroups,
   buildRandomTeamGroups,
   changeQualifiersPerGroup,
+  hasRecordedResults,
   maxQualifiersPerGroup,
+  removeConsolationBracket,
+  removeThirdPlaceMatch,
   computeTournamentState,
   createTournamentSlots,
   generateNextSwissRound,
@@ -633,6 +636,52 @@ console.log('changing qualifiers keeps optional extras')
   );
   check('no 3rd place when the rebuilt bracket has no semifinals',
     single !== null && !single.some(slot => slot.home.kind === 'loser'));
+}
+
+// --- removing optional sections ----------------------------------------------------
+console.log('removing the 3rd place match and the consolation bracket');
+{
+  const tournament = makeTournament('groups_knockout', [1, 2, 3, 4, 5, 6, 7, 8], {
+    groupCount: 2,
+    qualifiersPerGroup: 2,
+    thirdPlaceMatch: true,
+    consolationBracket: true
+  });
+  const before = tournament.slots.length;
+  check('starts with a 3rd place slot', tournament.slots.some(slot => slot.home.kind === 'loser'));
+  check('starts with consolation slots', tournament.slots.some(slot => slot.phase === 'consolation'));
+
+  const withoutThird = removeThirdPlaceMatch(tournament)!;
+  check('3rd place removed', withoutThird.length === before - 1
+    && !withoutThird.some(slot => slot.home.kind === 'loser'));
+  tournament.slots = withoutThird;
+  check('removing twice is a no-op', removeThirdPlaceMatch(tournament) === null);
+
+  const consolationCount = tournament.slots.filter(slot => slot.phase === 'consolation').length;
+  const withoutConsolation = removeConsolationBracket(tournament)!;
+  check('consolation removed', withoutConsolation.length === tournament.slots.length - consolationCount
+    && !withoutConsolation.some(slot => slot.phase === 'consolation'));
+  tournament.slots = withoutConsolation;
+  check('removing consolation twice is a no-op', removeConsolationBracket(tournament) === null);
+
+  // the rest of the bracket keeps working after the removals
+  const matches: Match[] = [];
+  const final = playOut(tournament, matches);
+  check('tournament still completes', final.isComplete && final.championId === 1);
+}
+
+console.log('recorded results are detected before removal');
+{
+  const tournament = makeTournament('single_elimination', [1, 2, 3, 4], { thirdPlaceMatch: true });
+  const matches: Match[] = [];
+  playOut(tournament, matches);
+  const thirdPlace = tournament.slots.filter(slot => slot.home.kind === 'loser');
+  check('played 3rd place match is flagged as recorded', hasRecordedResults(thirdPlace));
+  check('empty section is not flagged', !hasRecordedResults([]));
+  const removed = removeThirdPlaceMatch(tournament)!;
+  check('removal still works with a recorded result', !removed.some(slot => slot.home.kind === 'loser'));
+  // the match itself is untouched: it stays in the season history
+  check('match kept in history', matches.some(match => match.id === thirdPlace[0].matchId));
 }
 
 console.log(failures === 0 ? '\nAll checks passed.' : `\n${failures} check(s) FAILED.`);

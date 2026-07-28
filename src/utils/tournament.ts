@@ -416,6 +416,28 @@ export const addThirdPlaceMatch = (tournament: Tournament): TournamentSlot[] | n
   return [...tournament.slots, withThirdPlace[withThirdPlace.length - 1]];
 };
 
+// Remove the 3rd place match. Returns the new slots array, or null when there
+// is none. Any recorded result stays in the season history as a normal match.
+export const removeThirdPlaceMatch = (tournament: Tournament): TournamentSlot[] | null => {
+  const thirdPlace = tournament.slots.find(
+    slot => slot.phase === 'knockout' && slot.home.kind === 'loser'
+  );
+  if (!thirdPlace) return null;
+  return tournament.slots.filter(slot => slot.id !== thirdPlace.id);
+};
+
+// Remove the consolation bracket (all its slots). Recorded results stay in the
+// season history as normal matches.
+export const removeConsolationBracket = (tournament: Tournament): TournamentSlot[] | null => {
+  if (!tournament.slots.some(slot => slot.phase === 'consolation')) return null;
+  return tournament.slots.filter(slot => slot.phase !== 'consolation');
+};
+
+// Does a set of slots already carry recorded results? (used to warn before
+// removing a bracket section)
+export const hasRecordedResults = (slots: TournamentSlot[]): boolean =>
+  slots.some(slot => slot.matchId !== null);
+
 // Add a consolation bracket to an existing groups+knockout tournament.
 // Returns the new slots array, or null when not applicable / already present.
 export const addConsolationBracket = (tournament: Tournament): TournamentSlot[] | null => {

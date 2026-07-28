@@ -27,7 +27,10 @@ import {
   createTournamentSlots,
   generateNextSwissRound,
   getSideMemberIds,
+  hasRecordedResults,
   orderParticipants,
+  removeConsolationBracket,
+  removeThirdPlaceMatch,
   slotContextLabel,
   suggestedTeamSize
 } from '../utils/tournament';
@@ -703,6 +706,40 @@ const ChampionshipManager = () => {
     }
   };
 
+  const handleRemoveThirdPlaceMatch = (tournament: Tournament) => {
+    if (!requireCurrentSeason(tournament)) return;
+    const thirdPlace = tournament.slots.filter(
+      slot => slot.phase === 'knockout' && slot.home.kind === 'loser'
+    );
+    if (hasRecordedResults(thirdPlace) && !window.confirm(
+      'The 3rd place match already has a result.\n\nRemoving it keeps that match in the season history (and its ELO), but it will no longer be part of the tournament.\n\nContinue?'
+    )) return;
+
+    const newSlots = removeThirdPlaceMatch(tournament);
+    if (!newSlots) return;
+    setTournaments(prev => prev.map(item => (
+      item.id === tournament.id
+        ? { ...item, config: { ...item.config, thirdPlaceMatch: false }, slots: newSlots }
+        : item
+    )));
+  };
+
+  const handleRemoveConsolationBracket = (tournament: Tournament) => {
+    if (!requireCurrentSeason(tournament)) return;
+    const consolation = tournament.slots.filter(slot => slot.phase === 'consolation');
+    if (hasRecordedResults(consolation) && !window.confirm(
+      'The consolation bracket already has results.\n\nRemoving it keeps those matches in the season history (and their ELO), but they will no longer be part of the tournament.\n\nContinue?'
+    )) return;
+
+    const newSlots = removeConsolationBracket(tournament);
+    if (!newSlots) return;
+    setTournaments(prev => prev.map(item => (
+      item.id === tournament.id
+        ? { ...item, config: { ...item.config, consolationBracket: false }, slots: newSlots }
+        : item
+    )));
+  };
+
   const handleDeleteTournament = async (tournament: Tournament) => {
     const confirmMessage = `Are you sure you want to delete the tournament "${tournament.name}"?\n\nMatches already played will remain in the season history.`;
     if (!window.confirm(confirmMessage)) {
@@ -1237,6 +1274,8 @@ const ChampionshipManager = () => {
                 onDeleteTournament={handleDeleteTournament}
                 onAddThirdPlaceMatch={handleAddThirdPlaceMatch}
                 onAddConsolationBracket={handleAddConsolationBracket}
+                onRemoveThirdPlaceMatch={handleRemoveThirdPlaceMatch}
+                onRemoveConsolationBracket={handleRemoveConsolationBracket}
                 onGenerateShareLink={handleGenerateShareLink}
                 onRenameTournament={handleRenameTournament}
                 onRenameTeam={handleRenameTeam}
