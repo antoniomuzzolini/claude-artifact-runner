@@ -25,6 +25,9 @@ interface TournamentsTabProps {
   onAddThirdPlaceMatch: (tournament: Tournament) => void;
   onAddConsolationBracket: (tournament: Tournament) => void;
   onGenerateShareLink: (tournament: Tournament) => Promise<string | null>;
+  onRenameTournament: (tournament: Tournament, name: string) => void;
+  onRenameTeam: (tournament: Tournament, teamId: number, name: string) => void;
+  onChangeQualifiers: (tournament: Tournament, qualifiersPerGroup: number) => void;
   onRefresh: () => void;
 }
 
@@ -46,6 +49,9 @@ const TournamentsTab: React.FC<TournamentsTabProps> = ({
   onAddThirdPlaceMatch,
   onAddConsolationBracket,
   onGenerateShareLink,
+  onRenameTournament,
+  onRenameTeam,
+  onChangeQualifiers,
   onRefresh
 }) => {
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -85,6 +91,9 @@ const TournamentsTab: React.FC<TournamentsTabProps> = ({
         onAddThirdPlaceMatch={onAddThirdPlaceMatch}
         onAddConsolationBracket={onAddConsolationBracket}
         onGenerateShareLink={onGenerateShareLink}
+        onRenameTournament={onRenameTournament}
+        onRenameTeam={onRenameTeam}
+        onChangeQualifiers={onChangeQualifiers}
         onRefresh={onRefresh}
         onDelete={async (tournament) => {
           const deleted = await onDeleteTournament(tournament);

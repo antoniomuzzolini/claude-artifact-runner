@@ -6,6 +6,8 @@ import {
   addThirdPlaceMatch,
   buildBalancedTeamGroups,
   buildRandomTeamGroups,
+  changeQualifiersPerGroup,
+  maxQualifiersPerGroup,
   computeTournamentState,
   createTournamentSlots,
   generateNextSwissRound,
@@ -561,6 +563,76 @@ console.log('team knockout (4 teams of 2, third place included)');
   const thirdSlot = final.slots.find(slot => slot.home.kind === 'loser')!;
   check('bronze goes to team 3 (best semifinal loser)', thirdSlot.winnerPlayerId === 3);
   check('4 matches played', final.playedMatches === 4);
+}
+
+// --- changing qualifiers mid-group-stage -------------------------------------------
+console.log('changing qualifiers per group while the bracket is untouched');
+{
+  const tournament = makeTournament('groups_knockout', [1, 2, 3, 4, 5, 6, 7, 8], {
+    groupCount: 2,
+    qualifiersPerGroup: 4
+  });
+  const matches: Match[] = [];
+  check('max qualifiers limited by group size', maxQualifiersPerGroup(tournament) === 4);
+  const groupSlotCount = tournament.slots.filter(slot => slot.phase === 'group').length;
+  check('bracket starts with 8 qualifiers (7 slots)',
+    tournament.slots.filter(slot => slot.phase === 'knockout').length === 7);
+
+  // play a couple of group matches: results must survive the rebuild
+  const firstGroupSlot = tournament.slots.find(slot => slot.phase === 'group')!;
+  const playedMatch = makeMatch(
+    (firstGroupSlot.home as { playerId: number }).playerId,
+    (firstGroupSlot.away as { playerId: number }).playerId,
+    10, 5
+  );
+  matches.push(playedMatch);
+  firstGroupSlot.matchId = playedMatch.id;
+
+  const reduced = changeQualifiersPerGroup(tournament, 2);
+  check('slots rebuilt for 2 per group', reduced !== null);
+  tournament.slots = reduced!;
+  tournament.config.qualifiersPerGroup = 2;
+  check('group slots untouched', tournament.slots.filter(slot => slot.phase === 'group').length === groupSlotCount);
+  check('played group result kept',
+    tournament.slots.find(slot => slot.id === firstGroupSlot.id)!.matchId === playedMatch.id);
+  check('bracket now has 4 qualifiers (3 slots)',
+    tournament.slots.filter(slot => slot.phase === 'knockout').length === 3);
+
+  check('no-op when the value does not change', changeQualifiersPerGroup(tournament, 2) === null);
+  check('refuses more qualifiers than the smallest group', changeQualifiersPerGroup(tournament, 9) === null);
+  check('refuses a bracket with fewer than 2 entrants',
+    changeQualifiersPerGroup(makeTournament('groups_knockout', [1, 2, 3, 4, 5, 6], { groupCount: 1, qualifiersPerGroup: 2 }), 1) === null);
+
+  // finish the groups, play one knockout match -> locked from now on
+  playOut(tournament, matches);
+  check('locked once a knockout match is played', changeQualifiersPerGroup(tournament, 1) === null);
+}
+
+console.log('changing qualifiers keeps optional extras')
+{
+  // 4 groups of 3: dropping to 1 per group still leaves 4 in the bracket,
+  // so semifinals (and therefore a 3rd place match) still exist
+  const tournament = makeTournament('groups_knockout', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], {
+    groupCount: 4,
+    qualifiersPerGroup: 2,
+    thirdPlaceMatch: true,
+    consolationBracket: true
+  });
+  const rebuilt = changeQualifiersPerGroup(tournament, 1);
+  check('rebuild keeps a 3rd place match when configured',
+    rebuilt !== null && rebuilt.some(slot => slot.home.kind === 'loser'));
+  check('rebuild keeps the consolation bracket',
+    rebuilt !== null && rebuilt.some(slot => slot.phase === 'consolation'));
+  // 1 qualifier per group -> the final is the only knockout match, so no
+  // semifinals and therefore no 3rd place slot is possible
+  const single = changeQualifiersPerGroup(
+    makeTournament('groups_knockout', [1, 2, 3, 4, 5, 6, 7, 8], {
+      groupCount: 2, qualifiersPerGroup: 2, thirdPlaceMatch: true
+    }),
+    1
+  );
+  check('no 3rd place when the rebuilt bracket has no semifinals',
+    single !== null && !single.some(slot => slot.home.kind === 'loser'));
 }
 
 console.log(failures === 0 ? '\nAll checks passed.' : `\n${failures} check(s) FAILED.`);

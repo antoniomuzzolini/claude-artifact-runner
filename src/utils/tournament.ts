@@ -320,6 +320,19 @@ const appendThirdPlaceSlot = (
   ];
 };
 
+// Qualifier seeding: all first-ranked (group order), then all second-ranked,
+// and so on. Combined with the bracket seed order this pairs group winners
+// against runners-up of other groups in the first knockout round.
+const buildQualifierSources = (groupCount: number, qualifiersPerGroup: number): SlotSource[] => {
+  const sources: SlotSource[] = [];
+  for (let rank = 0; rank < qualifiersPerGroup; rank += 1) {
+    for (let group = 0; group < groupCount; group += 1) {
+      sources.push({ kind: 'qualifier', group, rank });
+    }
+  }
+  return sources;
+};
+
 // Consolation bracket: knockout among the non-qualifiers, seeded by group rank
 // (all third-ranked first, then fourth-ranked, ...). Groups can be uneven, so
 // only ranks that actually exist in a group are included.
@@ -337,6 +350,59 @@ const buildConsolationSlots = (
     }
   }
   return buildKnockoutSlots(sources, 'co', 'consolation');
+};
+
+// Sides in seed order: teams for team tournaments, players otherwise
+const tournamentSideIds = (tournament: Tournament): number[] => (
+  (tournament.teams?.length ?? 0) > 0
+    ? tournament.teams!.map(team => Number(team.id))
+    : tournament.participantIds
+);
+
+// How many sides can qualify per group (limited by the smallest group)
+export const maxQualifiersPerGroup = (tournament: Tournament): number => {
+  const groupCount = tournament.config.groupCount ?? 0;
+  if (tournament.format !== 'groups_knockout' || groupCount < 1) return 0;
+  const groups = distributeIntoGroups(tournamentSideIds(tournament), groupCount);
+  return groups.reduce((min, group) => Math.min(min, group.length), Infinity);
+};
+
+// Change how many sides advance from each group. Allowed only while the
+// knockout stage is untouched: group results are kept as they are and only
+// the bracket (plus consolation) is rebuilt from the new qualifier count.
+// Returns the new slots array, or null when not applicable.
+export const changeQualifiersPerGroup = (
+  tournament: Tournament,
+  qualifiersPerGroup: number
+): TournamentSlot[] | null => {
+  if (tournament.format !== 'groups_knockout') return null;
+  const groupCount = tournament.config.groupCount ?? 0;
+  if (groupCount < 1) return null;
+  if (!Number.isFinite(qualifiersPerGroup) || qualifiersPerGroup < 1) return null;
+  if (qualifiersPerGroup === (tournament.config.qualifiersPerGroup ?? 2)) return null;
+  // The bracket needs at least two entrants, and a group cannot send through
+  // more sides than it has
+  if (qualifiersPerGroup * groupCount < 2) return null;
+  if (qualifiersPerGroup > maxQualifiersPerGroup(tournament)) return null;
+
+  // Any recorded knockout/consolation result would be orphaned by the rebuild
+  const bracketStarted = tournament.slots.some(
+    slot => (slot.phase === 'knockout' || slot.phase === 'consolation') && slot.matchId !== null
+  );
+  if (bracketStarted) return null;
+
+  const groups = distributeIntoGroups(tournamentSideIds(tournament), groupCount);
+  const groupSlots = tournament.slots.filter(slot => slot.phase === 'group');
+
+  let knockoutSlots = buildKnockoutSlots(buildQualifierSources(groupCount, qualifiersPerGroup), 'ko');
+  if (tournament.config.thirdPlaceMatch) {
+    knockoutSlots = appendThirdPlaceSlot(knockoutSlots, 'ko');
+  }
+  const consolationSlots = tournament.config.consolationBracket
+    ? buildConsolationSlots(groups, qualifiersPerGroup)
+    : [];
+
+  return [...groupSlots, ...knockoutSlots, ...consolationSlots];
 };
 
 // Add a 3rd place match to an existing tournament (forgotten at creation).
@@ -360,10 +426,7 @@ export const addConsolationBracket = (tournament: Tournament): TournamentSlot[] 
   if (groupCount < 1) return null;
   // Sides are stored in seed order (teams or participantIds): this rebuilds
   // the exact same group distribution used at creation time
-  const sideIds = (tournament.teams?.length ?? 0) > 0
-    ? tournament.teams!.map(team => Number(team.id))
-    : tournament.participantIds;
-  const groups = distributeIntoGroups(sideIds, groupCount);
+  const groups = distributeIntoGroups(tournamentSideIds(tournament), groupCount);
   const consolationSlots = buildConsolationSlots(groups, qualifiersPerGroup);
   if (consolationSlots.length === 0) return null;
   return [...tournament.slots, ...consolationSlots];
@@ -486,17 +549,7 @@ export const createTournamentSlots = (
         buildRoundRobinSlots(groupIds, 'group', `g${groupIndex + 1}`, groupIndex, sideKind)
       );
 
-      // Qualifier seeding: all first-ranked (group order), then all second-ranked,
-      // and so on. Combined with the bracket seed order this pairs group winners
-      // against runners-up of other groups in the first knockout round.
-      const qualifierSources: SlotSource[] = [];
-      for (let rank = 0; rank < qualifiersPerGroup; rank += 1) {
-        for (let group = 0; group < groupCount; group += 1) {
-          qualifierSources.push({ kind: 'qualifier', group, rank });
-        }
-      }
-
-      let knockoutSlots = buildKnockoutSlots(qualifierSources, 'ko');
+      let knockoutSlots = buildKnockoutSlots(buildQualifierSources(groupCount, qualifiersPerGroup), 'ko');
       if (config.thirdPlaceMatch) {
         knockoutSlots = appendThirdPlaceSlot(knockoutSlots, 'ko');
       }

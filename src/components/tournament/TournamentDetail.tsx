@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from 'react';
-import { ArrowLeft, Copy, Crown, Link2, Lock, Pencil, PlusCircle, Trash2, Trophy } from 'lucide-react';
+import { ArrowLeft, Check, Copy, Crown, Link2, Lock, Pencil, PlusCircle, Trash2, Trophy, X } from 'lucide-react';
 import { Match, Player, Tournament } from '../../types/championship';
 import {
   ResolvedSlot,
@@ -10,6 +10,7 @@ import {
   getSideName,
   groupLetter,
   knockoutRoundLabel,
+  maxQualifiersPerGroup,
   slotContextLabel
 } from '../../utils/tournament';
 import BracketView from './BracketView';
@@ -31,6 +32,9 @@ interface TournamentDetailProps {
   onAddThirdPlaceMatch: (tournament: Tournament) => void;
   onAddConsolationBracket: (tournament: Tournament) => void;
   onGenerateShareLink: (tournament: Tournament) => Promise<string | null>;
+  onRenameTournament: (tournament: Tournament, name: string) => void;
+  onRenameTeam: (tournament: Tournament, teamId: number, name: string) => void;
+  onChangeQualifiers: (tournament: Tournament, qualifiersPerGroup: number) => void;
   onRefresh: () => void;
   onBack: () => void;
 }
@@ -46,6 +50,70 @@ const sideName = (
   if (isBye) return 'Bye';
   if (playerId !== null) return getPlayerName(playerId);
   return placeholder ?? 'TBD';
+};
+
+// Click-to-edit name (tournament title, team name). Enter saves, Esc cancels.
+const InlineRename: React.FC<{
+  value: string;
+  onSave: (name: string) => void;
+  className?: string;
+  inputClassName?: string;
+  label: string;
+}> = ({ value, onSave, className, inputClassName, label }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  const commit = () => {
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== value) onSave(trimmed);
+    setIsEditing(false);
+  };
+
+  if (!isEditing) {
+    return (
+      <button
+        onClick={() => {
+          setDraft(value);
+          setIsEditing(true);
+        }}
+        className={`group inline-flex items-center gap-1.5 min-w-0 text-left ${className ?? ''}`}
+        title={`Rename ${label}`}
+      >
+        <span className="truncate">{value}</span>
+        <Pencil className="w-3.5 h-3.5 shrink-0 opacity-0 group-hover:opacity-100 text-gray-400 dark:text-gray-500 transition-opacity duration-200" />
+      </button>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 min-w-0">
+      <input
+        autoFocus
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') commit();
+          if (event.key === 'Escape') setIsEditing(false);
+        }}
+        aria-label={`Rename ${label}`}
+        className={`min-w-0 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClassName ?? ''}`}
+      />
+      <button
+        onClick={commit}
+        className="p-1 rounded text-green-600 dark:text-green-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+        aria-label="Save name"
+      >
+        <Check className="w-4 h-4" />
+      </button>
+      <button
+        onClick={() => setIsEditing(false)}
+        className="p-1 rounded text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+        aria-label="Cancel rename"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </span>
+  );
 };
 
 const MatchRow: React.FC<{
@@ -219,6 +287,9 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
   onAddThirdPlaceMatch,
   onAddConsolationBracket,
   onGenerateShareLink,
+  onRenameTournament,
+  onRenameTeam,
+  onChangeQualifiers,
   onRefresh,
   onBack
 }) => {
@@ -259,6 +330,20 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
 
   const hasStandings = tournament.format !== 'single_elimination';
   const hasBracket = tournament.format === 'single_elimination' || tournament.format === 'groups_knockout';
+  // Qualifiers can still be changed while the bracket is untouched: the group
+  // results stay, only the knockout structure is rebuilt
+  const qualifierOptions = useMemo(() => {
+    if (tournament.format !== 'groups_knockout') return [];
+    const max = maxQualifiersPerGroup(tournament);
+    if (!Number.isFinite(max) || max < 1) return [];
+    return Array.from({ length: max }, (_, index) => index + 1)
+      .filter(count => count * groupCount >= 2);
+  }, [tournament, groupCount]);
+  const canChangeQualifiers = canManage
+    && tournament.format === 'groups_knockout'
+    && !hasKnockoutResults
+    && qualifierOptions.length > 1;
+
   // Late additions for flags forgotten in the creation wizard
   const canAddThirdPlace = canManage && hasBracket && !thirdPlaceSlot && totalKnockoutRounds >= 2;
   const canAddConsolation = canManage
@@ -422,7 +507,17 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="min-w-0">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white truncate">{tournament.name}</h2>
+            {canManage ? (
+              <InlineRename
+                value={tournament.name}
+                onSave={(name) => onRenameTournament(tournament, name)}
+                label="tournament"
+                className="text-2xl font-bold text-gray-900 dark:text-white max-w-full"
+                inputClassName="text-2xl font-bold w-full max-w-md"
+              />
+            ) : (
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white truncate">{tournament.name}</h2>
+            )}
             <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
               <span className="font-semibold text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/40 px-2 py-0.5 rounded-full">
                 {formatLabel(tournament.format)}
@@ -703,6 +798,31 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
             </div>
           )}
 
+          {/* Qualifiers can be tuned until the knockout stage starts */}
+          {canChangeQualifiers && (
+            <div className="pt-4 border-t border-gray-100 dark:border-gray-700/60">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Qualifiers per group
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={tournament.config.qualifiersPerGroup ?? 2}
+                  onChange={(event) => onChangeQualifiers(tournament, Number(event.target.value))}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {qualifierOptions.map(count => (
+                    <option key={count} value={count}>
+                      Top {count} · {count * groupCount} in the bracket
+                    </option>
+                  ))}
+                </select>
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  Group results are kept; the bracket is rebuilt. Locked once a knockout match is played.
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Late additions for flags forgotten in the creation wizard */}
           {(canAddThirdPlace || canAddConsolation) && (
             <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-100 dark:border-gray-700/60">
@@ -741,9 +861,19 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
                 key={team.id}
                 className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3"
               >
-                <div className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                  {team.name}
-                </div>
+                {canManage ? (
+                  <InlineRename
+                    value={team.name}
+                    onSave={(name) => onRenameTeam(tournament, Number(team.id), name)}
+                    label="team"
+                    className="text-sm font-semibold text-gray-900 dark:text-white max-w-full"
+                    inputClassName="text-sm font-semibold w-full"
+                  />
+                ) : (
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                    {team.name}
+                  </div>
+                )}
                 <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   {team.playerIds.map(playerId => getPlayerName(playerId)).join(', ')}
                 </div>

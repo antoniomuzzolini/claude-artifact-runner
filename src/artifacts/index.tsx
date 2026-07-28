@@ -23,6 +23,7 @@ import {
   ResolvedSlot,
   addConsolationBracket,
   addThirdPlaceMatch,
+  changeQualifiersPerGroup,
   createTournamentSlots,
   generateNextSwissRound,
   getSideMemberIds,
@@ -629,6 +630,56 @@ const ChampionshipManager = () => {
     )));
   };
 
+  // Rename a tournament, a team, or change how many sides qualify from each
+  // group — all allowed while the tournament is running
+  const requireCurrentSeason = (tournament: Tournament): boolean => {
+    if (!currentSeasonId || !isViewingCurrentSeason || tournament.season_id !== currentSeasonId) {
+      alert('You can only modify tournaments in the current season.');
+      return false;
+    }
+    return true;
+  };
+
+  const handleRenameTournament = (tournament: Tournament, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === tournament.name) return;
+    if (!requireCurrentSeason(tournament)) return;
+    setTournaments(prev => prev.map(item => (
+      item.id === tournament.id ? { ...item, name: trimmed } : item
+    )));
+  };
+
+  const handleRenameTeam = (tournament: Tournament, teamId: number, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (!requireCurrentSeason(tournament)) return;
+    setTournaments(prev => prev.map(item => (
+      item.id === tournament.id
+        ? {
+            ...item,
+            teams: item.teams?.map(team => (
+              Number(team.id) === Number(teamId) ? { ...team, name: trimmed } : team
+            ))
+          }
+        : item
+    )));
+  };
+
+  const handleChangeQualifiers = (tournament: Tournament, qualifiersPerGroup: number) => {
+    if (!requireCurrentSeason(tournament)) return;
+    const newSlots = changeQualifiersPerGroup(tournament, qualifiersPerGroup);
+    if (!newSlots) return;
+    setTournaments(prev => prev.map(item => (
+      item.id === tournament.id
+        ? {
+            ...item,
+            config: { ...item.config, qualifiersPerGroup },
+            slots: newSlots
+          }
+        : item
+    )));
+  };
+
   // Create (or fetch) the tournament's public board code for /t/<code>
   const handleGenerateShareLink = async (tournament: Tournament): Promise<string | null> => {
     try {
@@ -1187,6 +1238,9 @@ const ChampionshipManager = () => {
                 onAddThirdPlaceMatch={handleAddThirdPlaceMatch}
                 onAddConsolationBracket={handleAddConsolationBracket}
                 onGenerateShareLink={handleGenerateShareLink}
+                onRenameTournament={handleRenameTournament}
+                onRenameTeam={handleRenameTeam}
+                onChangeQualifiers={handleChangeQualifiers}
                 onRefresh={refreshData}
               />
             )}
