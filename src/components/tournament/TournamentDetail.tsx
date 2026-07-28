@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from 'react';
-import { ArrowLeft, Check, Copy, Crown, Link2, Lock, Pencil, PlusCircle, Trash2, Trophy, X } from 'lucide-react';
+import { ArrowLeft, Check, Copy, Crown, Link2, Lock, Pencil, PlusCircle, RefreshCw, Trash2, Trophy, X } from 'lucide-react';
 import { Match, Player, Tournament } from '../../types/championship';
 import {
   ResolvedSlot,
@@ -33,6 +33,7 @@ interface TournamentDetailProps {
   onAddConsolationBracket: (tournament: Tournament) => void;
   onRemoveThirdPlaceMatch: (tournament: Tournament) => void;
   onRemoveConsolationBracket: (tournament: Tournament) => void;
+  onRebuildBracket: (tournament: Tournament) => void;
   onGenerateShareLink: (tournament: Tournament) => Promise<string | null>;
   onRenameTournament: (tournament: Tournament, name: string) => void;
   onRenameTeam: (tournament: Tournament, teamId: number, name: string) => void;
@@ -290,6 +291,7 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
   onAddConsolationBracket,
   onRemoveThirdPlaceMatch,
   onRemoveConsolationBracket,
+  onRebuildBracket,
   onGenerateShareLink,
   onRenameTournament,
   onRenameTeam,
@@ -831,7 +833,8 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
           )}
 
           {/* Optional sections can be added or removed while the tournament runs */}
-          {(canAddThirdPlace || canAddConsolation || canRemoveThirdPlace || canRemoveConsolation) && (
+          {(canAddThirdPlace || canAddConsolation || canRemoveThirdPlace || canRemoveConsolation
+            || (canManage && tournament.format === 'groups_knockout')) && (
             <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-100 dark:border-gray-700/60">
               {canAddThirdPlace && (
                 <button
@@ -871,6 +874,16 @@ const TournamentDetail: React.FC<TournamentDetailProps> = ({
                 >
                   <Trash2 className="w-4 h-4" />
                   Remove consolation bracket
+                </button>
+              )}
+              {canManage && tournament.format === 'groups_knockout' && (
+                <button
+                  onClick={() => onRebuildBracket(tournament)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm whitespace-nowrap text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors duration-200"
+                  title="Regenerate the knockout bracket from the current settings (group results are kept)"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Rebuild bracket
                 </button>
               )}
             </div>

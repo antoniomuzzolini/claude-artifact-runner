@@ -26,6 +26,7 @@ interface TournamentsTabProps {
   onAddConsolationBracket: (tournament: Tournament) => void;
   onRemoveThirdPlaceMatch: (tournament: Tournament) => void;
   onRemoveConsolationBracket: (tournament: Tournament) => void;
+  onRebuildBracket: (tournament: Tournament) => void;
   onGenerateShareLink: (tournament: Tournament) => Promise<string | null>;
   onRenameTournament: (tournament: Tournament, name: string) => void;
   onRenameTeam: (tournament: Tournament, teamId: number, name: string) => void;
@@ -52,6 +53,7 @@ const TournamentsTab: React.FC<TournamentsTabProps> = ({
   onAddConsolationBracket,
   onRemoveThirdPlaceMatch,
   onRemoveConsolationBracket,
+  onRebuildBracket,
   onGenerateShareLink,
   onRenameTournament,
   onRenameTeam,
@@ -96,6 +98,7 @@ const TournamentsTab: React.FC<TournamentsTabProps> = ({
         onAddConsolationBracket={onAddConsolationBracket}
         onRemoveThirdPlaceMatch={onRemoveThirdPlaceMatch}
         onRemoveConsolationBracket={onRemoveConsolationBracket}
+        onRebuildBracket={onRebuildBracket}
         onGenerateShareLink={onGenerateShareLink}
         onRenameTournament={onRenameTournament}
         onRenameTeam={onRenameTeam}

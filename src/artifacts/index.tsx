@@ -29,6 +29,7 @@ import {
   getSideMemberIds,
   hasRecordedResults,
   orderParticipants,
+  rebuildBracket,
   removeConsolationBracket,
   removeThirdPlaceMatch,
   slotContextLabel,
@@ -598,7 +599,7 @@ const ChampionshipManager = () => {
     if (!newSlots || newSlots.length === 0) return;
     setTournaments(prev => prev.map(item => (
       item.id === tournament.id
-        ? { ...item, slots: [...item.slots, ...newSlots] }
+        ? { ...item, slots: [...item.slots, ...newSlots], structureVersion: bumpStructure(tournament) }
         : item
     )));
   };
@@ -614,7 +615,7 @@ const ChampionshipManager = () => {
     if (!newSlots) return;
     setTournaments(prev => prev.map(item => (
       item.id === tournament.id
-        ? { ...item, config: { ...item.config, thirdPlaceMatch: true }, slots: newSlots }
+        ? { ...item, config: { ...item.config, thirdPlaceMatch: true }, slots: newSlots, structureVersion: bumpStructure(tournament) }
         : item
     )));
   };
@@ -628,7 +629,7 @@ const ChampionshipManager = () => {
     if (!newSlots) return;
     setTournaments(prev => prev.map(item => (
       item.id === tournament.id
-        ? { ...item, config: { ...item.config, consolationBracket: true }, slots: newSlots }
+        ? { ...item, config: { ...item.config, consolationBracket: true }, slots: newSlots, structureVersion: bumpStructure(tournament) }
         : item
     )));
   };
@@ -642,6 +643,10 @@ const ChampionshipManager = () => {
     }
     return true;
   };
+
+  // Structural changes must be distinguishable from a stale snapshot server
+  // side, otherwise the sync merge re-adds the slots a rebuild just removed
+  const bumpStructure = (tournament: Tournament) => (tournament.structureVersion ?? 0) + 1;
 
   const handleRenameTournament = (tournament: Tournament, name: string) => {
     const trimmed = name.trim();
@@ -677,7 +682,8 @@ const ChampionshipManager = () => {
         ? {
             ...item,
             config: { ...item.config, qualifiersPerGroup },
-            slots: newSlots
+            slots: newSlots,
+            structureVersion: bumpStructure(tournament)
           }
         : item
     )));
@@ -719,7 +725,7 @@ const ChampionshipManager = () => {
     if (!newSlots) return;
     setTournaments(prev => prev.map(item => (
       item.id === tournament.id
-        ? { ...item, config: { ...item.config, thirdPlaceMatch: false }, slots: newSlots }
+        ? { ...item, config: { ...item.config, thirdPlaceMatch: false }, slots: newSlots, structureVersion: bumpStructure(tournament) }
         : item
     )));
   };
@@ -735,7 +741,26 @@ const ChampionshipManager = () => {
     if (!newSlots) return;
     setTournaments(prev => prev.map(item => (
       item.id === tournament.id
-        ? { ...item, config: { ...item.config, consolationBracket: false }, slots: newSlots }
+        ? { ...item, config: { ...item.config, consolationBracket: false }, slots: newSlots, structureVersion: bumpStructure(tournament) }
+        : item
+    )));
+  };
+
+  const handleRebuildBracket = (tournament: Tournament) => {
+    if (!requireCurrentSeason(tournament)) return;
+    const bracketSlots = tournament.slots.filter(
+      slot => slot.phase === 'knockout' || slot.phase === 'consolation'
+    );
+    const message = hasRecordedResults(bracketSlots)
+      ? 'Rebuild the knockout bracket from the current settings?\n\nGroup results are kept. Knockout matches already played stay in the season history (and their ELO), but they will be unlinked and have to be entered again.\n\nContinue?'
+      : 'Rebuild the knockout bracket from the current settings?\n\nGroup results are kept.';
+    if (!window.confirm(message)) return;
+
+    const newSlots = rebuildBracket(tournament);
+    if (!newSlots) return;
+    setTournaments(prev => prev.map(item => (
+      item.id === tournament.id
+        ? { ...item, slots: newSlots, structureVersion: bumpStructure(tournament) }
         : item
     )));
   };
@@ -1276,6 +1301,7 @@ const ChampionshipManager = () => {
                 onAddConsolationBracket={handleAddConsolationBracket}
                 onRemoveThirdPlaceMatch={handleRemoveThirdPlaceMatch}
                 onRemoveConsolationBracket={handleRemoveConsolationBracket}
+                onRebuildBracket={handleRebuildBracket}
                 onGenerateShareLink={handleGenerateShareLink}
                 onRenameTournament={handleRenameTournament}
                 onRenameTeam={handleRenameTeam}

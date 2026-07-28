@@ -151,7 +151,7 @@ const normalizeMatches = (
 const normalizeTournaments = (raw: unknown): Tournament[] => {
   if (!Array.isArray(raw)) return [];
   return raw
-    .map(entry => {
+    .map((entry): Tournament | null => {
       if (!entry || typeof entry !== 'object') return null;
       const tournament = entry as Tournament;
       const id = Number(tournament.id);
@@ -185,7 +185,8 @@ const normalizeTournaments = (raw: unknown): Tournament[] => {
                 : Number(slot.matchId)
             }))
           : [],
-        config: tournament.config ?? { pointsWin: 3, pointsDraw: 1 }
+        config: tournament.config ?? { pointsWin: 3, pointsDraw: 1 },
+        structureVersion: Number(tournament.structureVersion) || 0
       };
     })
     .filter((tournament): tournament is Tournament => !!tournament);

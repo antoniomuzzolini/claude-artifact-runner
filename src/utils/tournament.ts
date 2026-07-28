@@ -416,6 +416,30 @@ export const addThirdPlaceMatch = (tournament: Tournament): TournamentSlot[] | n
   return [...tournament.slots, withThirdPlace[withThirdPlace.length - 1]];
 };
 
+// Rebuild the knockout (and consolation) structure from the tournament's
+// current settings, keeping the group results. Recorded bracket links are
+// dropped: those matches stay in the season history but leave the tournament.
+// Escape hatch for a bracket that no longer matches the qualifier count.
+export const rebuildBracket = (tournament: Tournament): TournamentSlot[] | null => {
+  if (tournament.format !== 'groups_knockout') return null;
+  const groupCount = tournament.config.groupCount ?? 0;
+  if (groupCount < 1) return null;
+  const qualifiersPerGroup = tournament.config.qualifiersPerGroup ?? 2;
+
+  const groups = distributeIntoGroups(tournamentSideIds(tournament), groupCount);
+  const groupSlots = tournament.slots.filter(slot => slot.phase === 'group');
+
+  let knockoutSlots = buildKnockoutSlots(buildQualifierSources(groupCount, qualifiersPerGroup), 'ko');
+  if (tournament.config.thirdPlaceMatch) {
+    knockoutSlots = appendThirdPlaceSlot(knockoutSlots, 'ko');
+  }
+  const consolationSlots = tournament.config.consolationBracket
+    ? buildConsolationSlots(groups, qualifiersPerGroup)
+    : [];
+
+  return [...groupSlots, ...knockoutSlots, ...consolationSlots];
+};
+
 // Remove the 3rd place match. Returns the new slots array, or null when there
 // is none. Any recorded result stays in the season history as a normal match.
 export const removeThirdPlaceMatch = (tournament: Tournament): TournamentSlot[] | null => {

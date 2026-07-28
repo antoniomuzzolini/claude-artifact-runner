@@ -115,6 +115,10 @@ export interface Tournament {
   createdBy?: number;
   createdAt: string;
   shareCode?: string | null; // public board code for /t/<code> (opt-in)
+  // Bumped by the client on every intentional structure change (rebuilding the
+  // bracket, adding/removing sections). The sync merge uses it to tell a real
+  // restructure — where slots legitimately disappear — from a stale snapshot.
+  structureVersion?: number;
 }
 
 export interface AppData {

@@ -9,6 +9,7 @@ import {
   changeQualifiersPerGroup,
   hasRecordedResults,
   maxQualifiersPerGroup,
+  rebuildBracket,
   removeConsolationBracket,
   removeThirdPlaceMatch,
   computeTournamentState,
@@ -682,6 +683,62 @@ console.log('recorded results are detected before removal');
   check('removal still works with a recorded result', !removed.some(slot => slot.home.kind === 'loser'));
   // the match itself is untouched: it stays in the season history
   check('match kept in history', matches.some(match => match.id === thirdPlace[0].matchId));
+}
+
+// --- bracket rebuild ---------------------------------------------------------------
+console.log('rebuilding the bracket from the current settings');
+{
+  const tournament = makeTournament('groups_knockout', [1, 2, 3, 4, 5, 6, 7, 8], {
+    groupCount: 2,
+    qualifiersPerGroup: 2
+  });
+  const matches: Match[] = [];
+  playOut(tournament, matches);
+  const groupSlots = tournament.slots.filter(slot => slot.phase === 'group');
+  const playedGroupLinks = groupSlots.filter(slot => slot.matchId !== null).length;
+
+  const rebuilt = rebuildBracket(tournament)!;
+  check('rebuild keeps every group slot', rebuilt.filter(slot => slot.phase === 'group').length === groupSlots.length);
+  check('rebuild keeps group results',
+    rebuilt.filter(slot => slot.phase === 'group' && slot.matchId !== null).length === playedGroupLinks);
+  check('rebuild clears bracket links',
+    rebuilt.filter(slot => slot.phase === 'knockout').every(slot => slot.matchId === null));
+  check('rebuild produces exactly one bracket shape',
+    rebuilt.filter(slot => slot.phase === 'knockout').length === 3);
+
+  // the rebuilt bracket is immediately playable again from the group results
+  tournament.slots = rebuilt;
+  const state = computeTournamentState(tournament, matches);
+  check('rebuilt semifinals are ready',
+    state.slots.filter(slot => slot.phase === 'knockout' && slot.round === 1)
+      .every(slot => slot.status === 'ready'));
+}
+
+console.log('shrinking the bracket leaves no slots from the previous shape');
+{
+  // Regression: reducing qualifiers used to leave the old bracket's slots
+  // behind, producing quarterfinals and semifinals side by side
+  const tournament = makeTournament('groups_knockout', [1, 2, 3, 4, 5, 6, 7, 8], {
+    groupCount: 2,
+    qualifiersPerGroup: 4
+  });
+  const wide = tournament.slots.filter(slot => slot.phase === 'knockout').map(slot => slot.id);
+  check('8 qualifiers -> 3 rounds', new Set(
+    tournament.slots.filter(slot => slot.phase === 'knockout').map(slot => slot.round)
+  ).size === 3);
+
+  const narrow = changeQualifiersPerGroup(tournament, 2)!;
+  const narrowKo = narrow.filter(slot => slot.phase === 'knockout');
+  check('2 qualifiers -> 2 rounds', new Set(narrowKo.map(slot => slot.round)).size === 2);
+  check('no slot survives from the wider bracket',
+    narrowKo.every(slot => slot.round <= 2)
+    && !narrowKo.some(slot => slot.id === wide.find(id => id.endsWith('r3-0'))));
+  // every side appears at most once in the first knockout round
+  const firstRound = narrowKo.filter(slot => slot.round === 1);
+  const sources = firstRound.flatMap(slot => [slot.home, slot.away])
+    .filter(source => source.kind === 'qualifier')
+    .map(source => JSON.stringify(source));
+  check('no qualifier is used twice', new Set(sources).size === sources.length);
 }
 
 console.log(failures === 0 ? '\nAll checks passed.' : `\n${failures} check(s) FAILED.`);

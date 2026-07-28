@@ -228,6 +228,8 @@ async function ensureSeasonsSchema() {
   `;
   // Tournament-scoped teams (team tournaments); empty for individual ones
   await sql`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS teams JSONB;`;
+  // Structure revision, bumped by the client on intentional bracket changes
+  await sql`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS structure_version INTEGER DEFAULT 0;`;
 }
 
 const transformTournamentRow = (row: Record<string, any>) => ({
@@ -240,6 +242,7 @@ const transformTournamentRow = (row: Record<string, any>) => ({
   teams: Array.isArray(row.teams) ? row.teams : [],
   slots: Array.isArray(row.slots) ? row.slots : [],
   shareCode: row.share_code ?? null,
+  structureVersion: Number(row.structure_version) || 0,
   organization_id: row.organization_id,
   season_id: Number(row.season_id),
   createdBy: row.created_by ?? undefined,
@@ -465,16 +468,27 @@ export async function POST(req: NextRequest) {
         // Merge incoming slots with the stored ones instead of overwriting:
         // a stale client (backgrounded tab, outdated snapshot) must not be able
         // to null out match links or drop slots (e.g. swiss rounds) that were
-        // recorded from other devices. Slots are only ever added and matchIds
-        // only ever set/replaced by the app, so keeping existing non-null links
-        // and existing extra slots never discards a legitimate change.
+        // recorded from other devices.
+        //
+        // Exception: a structural change (rebuilding the bracket after the
+        // qualifier count changed, removing the 3rd place match or the
+        // consolation bracket) legitimately drops slots. The client bumps
+        // structureVersion for those, and a higher version means "take my
+        // slots as they are" — without it the merge kept re-adding the slots
+        // the rebuild had just removed, mixing two bracket shapes together.
         let mergedSlots: Array<{ id: string; matchId?: number | null }> =
           Array.isArray(tournament.slots) ? tournament.slots : [];
         let mergedTeams: unknown[] = Array.isArray(tournament.teams) ? tournament.teams : [];
         const existingRows = await sql`
-          SELECT slots, teams FROM tournaments
+          SELECT slots, teams, structure_version FROM tournaments
           WHERE id = ${tournamentId} AND organization_id = ${currentUser.organizationId}
         `;
+        const parsedIncomingVersion = Number(tournament.structureVersion);
+        const incomingVersion = Number.isFinite(parsedIncomingVersion) ? parsedIncomingVersion : 0;
+        const parsedStoredVersion = Number(existingRows[0]?.structure_version);
+        const storedVersion = Number.isFinite(parsedStoredVersion) ? parsedStoredVersion : 0;
+        const isStructuralUpdate = incomingVersion > storedVersion;
+        const structureVersion = Math.max(incomingVersion, storedVersion);
         // Same staleness guard as for slots: a payload without teams (old
         // client build, outdated snapshot) must not wipe stored teams
         if (existingRows.length > 0
@@ -483,7 +497,7 @@ export async function POST(req: NextRequest) {
           && existingRows[0].teams.length > 0) {
           mergedTeams = existingRows[0].teams;
         }
-        if (existingRows.length > 0 && Array.isArray(existingRows[0].slots)) {
+        if (!isStructuralUpdate && existingRows.length > 0 && Array.isArray(existingRows[0].slots)) {
           const existingSlots = existingRows[0].slots as Array<{ id: string; matchId?: number | null }>;
           const existingById = new Map(existingSlots.map(slot => [slot.id, slot]));
           mergedSlots = mergedSlots.map(slot => {
@@ -503,7 +517,7 @@ export async function POST(req: NextRequest) {
         }
 
         await sql`
-          INSERT INTO tournaments (id, organization_id, season_id, name, format, seeding, participant_ids, config, teams, slots, created_by, created_at)
+          INSERT INTO tournaments (id, organization_id, season_id, name, format, seeding, participant_ids, config, teams, slots, structure_version, created_by, created_at)
           VALUES (
             ${tournamentId},
             ${currentUser.organizationId},
@@ -515,6 +529,7 @@ export async function POST(req: NextRequest) {
             ${JSON.stringify(tournament.config ?? {})},
             ${JSON.stringify(mergedTeams)},
             ${JSON.stringify(mergedSlots)},
+            ${structureVersion},
             ${tournament.createdBy || currentUser.userId},
             ${tournament.createdAt || new Date().toISOString()}
           )
@@ -526,6 +541,7 @@ export async function POST(req: NextRequest) {
             config = EXCLUDED.config,
             teams = EXCLUDED.teams,
             slots = EXCLUDED.slots,
+            structure_version = EXCLUDED.structure_version,
             season_id = EXCLUDED.season_id
           WHERE tournaments.organization_id = ${currentUser.organizationId}
         `;
